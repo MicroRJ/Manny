@@ -29,15 +29,20 @@ typedef struct Build_State_Task
 }
 Build_State_Task;
 
+// --NOTE(RJ) Aug 24, 2026: mutex removed from state.
+//
+// We were doing something something quite silly!
+// When bob starts we load the build state; then as each thread completes and pushes
+// an event, the main thread reads it, and issues the appropriate stream commands.
+//
+// But we also update the build state we started with, the same one the worker threads
+// are reading.
+//
+// We don't have to do that, we can create a copy of the build
+// state and instead update that one!
+//
 typedef struct Build_State
 {
-	// TODO(RJ): this can be removed entirely! The problem is that we're doing something quite
-	// silly.
-	// When bob starts, we load the build state, then as each thread completes the main thread
-	// reads the events, and issues the appropriate stream commands. But we also update the
-	// build state we started with. We don't have to do that, we can create a copy of the build
-	// state and instead update that one!
-	Platform_Mutex       mutex;
 
 	// Backing storage must outlive the state.
 	Arena               *arena;

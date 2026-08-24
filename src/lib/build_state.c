@@ -85,7 +85,6 @@ b32 build_state_init(Build_State *state, Arena *arena)
 	ASSERT(arena);
 	*state = (Build_State){0};
 	state->arena = arena;
-	platform_init_mutex(&state->mutex);
 	state->initialized = true;
 	return true;
 }
@@ -94,17 +93,14 @@ void build_state_destroy(Build_State *state)
 {
 	ASSERT(state);
 	ASSERT(state->initialized);
-	platform_destroy_mutex(&state->mutex);
 	state->initialized = false;
 }
 
 void build_state_clear(Build_State *state)
 {
 	ASSERT(state);
-	ASSERT(state->initialized);
-	platform_lock_mutex(&state->mutex);
+	if (!state->initialized) return;
 	build_state_replace_unlocked(state, &(Build_State){0});
-	platform_unlock_mutex(&state->mutex);
 }
 
 b32 build_state_get(Build_State *state, Bob_Path output, Build_State_Task *result)
@@ -112,10 +108,8 @@ b32 build_state_get(Build_State *state, Bob_Path output, Build_State_Task *resul
 	ASSERT(state);
 	ASSERT(state->initialized);
 	ASSERT(result);
-	platform_lock_mutex(&state->mutex);
 	const Build_State_Task *task = build_state_find_unlocked(state, output);
 	*result = task ? *task : (Build_State_Task){0};
-	platform_unlock_mutex(&state->mutex);
 	return task != NULL;
 }
 
@@ -123,17 +117,14 @@ b32 build_state_set(Build_State *state, Bob_Path output, Bob_Path_Array dependen
 {
 	ASSERT(state);
 	ASSERT(state->initialized);
-	platform_lock_mutex(&state->mutex);
 	b32 result = build_state_set_unlocked(state, output, dependencies, fingerprint);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
 b32 build_state_remove(Build_State *state, Bob_Path output)
 {
-	if (!state || !state->initialized) return false;
-	platform_lock_mutex(&state->mutex);
+	ASSERT(state);
+	ASSERT(state->initialized);
 	b32 result = build_state_remove_unlocked(state, output);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }

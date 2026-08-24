@@ -14,6 +14,21 @@
 
 #define BOB_BUILD_STATE_PATH ".bob/state"
 
+typedef enum Bob_Rebuild_Reason
+{
+	BOB_REBUILD_UP_TO_DATE,
+	BOB_REBUILD_NO_OUTPUTS,
+	BOB_REBUILD_OUTPUT_MISSING,
+	BOB_REBUILD_INPUT_MISSING,
+	BOB_REBUILD_STATE_MISSING,
+	BOB_REBUILD_STATE_CHANGED,
+	BOB_REBUILD_FINGERPRINT_CHANGED,
+	BOB_REBUILD_DEPENDENCY_MISSING,
+	BOB_REBUILD_DEPENDENCY_CHANGED,
+	BOB_REBUILD_INPUT_NEWER,
+}
+Bob_Rebuild_Reason;
+
 struct Bob_Build
 {
 	Arena         arena;
@@ -22,6 +37,80 @@ struct Bob_Build
 	Bob_Interner *interner;
 	Bob_Path      root;
 };
+
+typedef struct Build_Task
+{
+	// Copy of the user's command line.
+	String           command_line;
+	// The processed command line, once other options are injected.
+	String           execution_command_line;
+	// Derived compiler metadata from the command line.
+	Compiler_Command compiler;
+
+	Bob_Path_Array   inputs;
+	Bob_Path_Array   outputs;
+	Bob_Path_Array   include_directories;
+	Bob_Path         execution_directory;
+	Bob_Path         dependency_file;
+
+	Bob_Fingerprint  fingerprint;
+
+	// Whether the compiler supports deps files and the task has any outputs.
+	b32              tracks_dependencies;
+
+	// If the task is transparent it is never marked as changed
+	b32              transparent;
+}
+Build_Task;
+
+typedef struct Bob_Rebuild_Decision
+{
+	Bob_Rebuild_Reason reason;
+	String             path;
+	String             reference;
+	const Bob_Node    *dependency;
+	b32                rebuild;
+}
+Bob_Rebuild_Decision;
+
+typedef struct Bob_Build_Completion
+{
+	Bob_Build                   *build;
+	Bob_Node                    *node;
+	Build_Task                  *task;
+	Bob_Platform_Process_Result  process;
+	Bob_Path_Array               dependencies;
+	Bob_Rebuild_Decision         decision;
+	b32                          dependency_state_valid;
+}
+Bob_Build_Completion;
+
+typedef struct Bob_Builder
+{
+	Bob_Build          *build;
+	Bob                *bob;
+	Bob_Path            state_path;
+
+	Build_State         state;
+	Build_State         streaming_state;
+	Build_State_Stream  state_stream;
+
+	Arena               state_arena;
+	void               *event_user_data;
+	Bob_Event_Function *event;
+	u32                 task_count;
+	u32                 completed_task_count;
+	// TODO(RJ): remove this from here!
+	b32                 state_tracking;
+
+	b32                 state_changed;
+	b32                 explain;
+	b32                 internal_error;
+}
+Bob_Builder;
+
+
+
 
 static b32 bob_path_is_absolute(String path)
 {
@@ -193,87 +282,6 @@ const Bob *bob_build_graph_const(const Bob_Build *build)
 	return build ? build->graph : NULL;
 }
 
-typedef enum Bob_Rebuild_Reason
-{
-	BOB_REBUILD_UP_TO_DATE,
-	BOB_REBUILD_NO_OUTPUTS,
-	BOB_REBUILD_OUTPUT_MISSING,
-	BOB_REBUILD_INPUT_MISSING,
-	BOB_REBUILD_STATE_MISSING,
-	BOB_REBUILD_STATE_CHANGED,
-	BOB_REBUILD_FINGERPRINT_CHANGED,
-	BOB_REBUILD_DEPENDENCY_MISSING,
-	BOB_REBUILD_DEPENDENCY_CHANGED,
-	BOB_REBUILD_INPUT_NEWER,
-}
-Bob_Rebuild_Reason;
-
-typedef struct Bob_Rebuild_Decision
-{
-	Bob_Rebuild_Reason reason;
-	String             path;
-	String             reference;
-	const Bob_Node    *dependency;
-	b32                rebuild;
-}
-Bob_Rebuild_Decision;
-
-
-typedef struct Build_Task
-{
-	// Copy of the user's command line.
-	String           command_line;
-	// The processed command line, once other options are injected.
-	String           execution_command_line;
-	// Derived compiler metadata from the command line.
-	Compiler_Command compiler;
-
-	Bob_Path_Array   inputs;
-	Bob_Path_Array   outputs;
-	Bob_Path_Array   include_directories;
-	Bob_Path         execution_directory;
-	Bob_Path         dependency_file;
-
-	Bob_Fingerprint  fingerprint;
-
-	// Whether the compiler supports deps files and the task has any outputs.
-	b32              tracks_dependencies;
-
-	// If the task is transparent it is never marked as changed
-	b32              transparent;
-}
-Build_Task;
-
-typedef struct Bob_Build_Completion
-{
-	Bob_Build                  *build;
-	Bob_Node                   *node;
-	Build_Task             *task;
-	Bob_Platform_Process_Result process;
-	Bob_Path_Array              dependencies;
-	Bob_Rebuild_Decision        decision;
-	b32                         dependency_state_valid;
-}
-Bob_Build_Completion;
-
-typedef struct Bob_Builder
-{
-	Bob_Build          *build;
-	Bob                *bob;
-	Bob_Path            state_path;
-	Build_State         state;
-	Build_State_Stream  state_stream;
-	Arena               state_arena;
-	void               *event_user_data;
-	Bob_Event_Function *event;
-	u32                 task_count;
-	u32                 completed_task_count;
-	b32                 state_tracking;
-	b32                 state_changed;
-	b32                 explain;
-	b32                 internal_error;
-}
-Bob_Builder;
 
 static Bob_Node_Result build_task_action(Bob_Node_Context *context, void *user_data);
 
@@ -563,7 +571,7 @@ static void build_task_event(Bob_Event event, void *user_data)
 	if (event.type == BOB_EVENT_COMPLETED && event.node && bob_node_function(event.node) == build_task_action)
 	{
 		Bob_Build_Completion *completion = event.result.output;
-		++builder->completed_task_count;
+		builder->completed_task_count ++;
 		if (!completion) builder->internal_error = true;
 		else
 		{
@@ -571,6 +579,7 @@ static void build_task_event(Bob_Event event, void *user_data)
 			if (builder->explain) report_explanation(completion);
 			report_completion(completion, builder->completed_task_count, builder->task_count);
 			profile_scope_end(&scope);
+
 			record_task_completion_state(builder, completion, event.result.succeeded);
 		}
 	}
@@ -592,17 +601,20 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 	Bob_Error execution_error;
 
 	if (!build || !build->graph || options.worker_count == 0) return false;
+
 	bob_execution_destroy(build->execution);
 	build->execution = NULL;
+
 	Bob *bob = build->graph;
 
 	builder.build = build;
 	builder.bob   = bob;
 	builder.event = options.event;
 	builder.event_user_data = options.user_data;
+	builder.explain = options.explain;
 
 	if (!bob_path_resolve(build, bob_build_root(build), LIT(BOB_BUILD_STATE_PATH), &builder.state_path)) return false;
-	builder.explain = options.explain;
+
 	for (u32 i = 0; i < bob_node_count(bob); ++i) {
 		Bob_Node *node = bob_node_at(bob, i);
 		if (bob_node_function(node) != build_task_action) continue;
@@ -621,11 +633,13 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		result = false;
 		goto cleanup;
 	}
-	if (!build_state_init(&builder.state, &builder.state_arena)) {
+	if (!build_state_init(&builder.streaming_state, &builder.state_arena)) {
 		result = false;
 		goto cleanup;
 	}
-	build_state_stream_init(&builder.state_stream, build, &builder.state);
+
+	build_state_stream_init(&builder.state_stream, build, &builder.streaming_state);
+
 	if (builder.state_tracking) {
 		String state_path = bob_path_string(build, builder.state_path);
 		Build_State_Load_Result load_result = build_state_stream_load(&builder.state_stream, state_path);
@@ -636,7 +650,7 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		}
 		else if (load_result == BUILD_STATE_LOAD_INVALID) {
 			log_warning("ignoring invalid Bob build state");
-			build_state_clear(&builder.state);
+			build_state_clear(&builder.streaming_state);
 		}
 		if (load_result != BUILD_STATE_LOAD_OK) {
 			if (!build_state_stream_save(&builder.state_stream, state_path)) {
@@ -647,12 +661,24 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		}
 	}
 
+	// NOTE(RJ): create a copy of the build state for threads to read safely
+	builder.state = builder.streaming_state;
+	builder.state.tasks = arena_push_copy_aligned(&builder.state_arena
+	, builder.state.task_count * sizeof(* builder.state.tasks), _Alignof(Build_State_Task), builder.state.tasks);
+	builder.state.task_capacity = builder.state.task_count;
+	if (builder.state.task_count > 0 && !builder.state.tasks) {
+		result = false;
+		goto cleanup;
+	}
+
 	execution_error = bob_execution_create(bob, &build->execution);
 	if (execution_error != BOB_OK) {
 		log_error("unable to create Bob execution: %s", bob_error_string(execution_error));
 		result = false;
 		goto cleanup;
 	}
+	// TODO(RJ): can we get rid of this callback thing and instead just have a loop here that
+	// executes until get an event?!
 	result = bob_execute(build->execution, (Bob_Exec_Params){
 		.worker_count = options.worker_count,
 		.user_data = &builder,
@@ -667,7 +693,8 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 	}
 
 cleanup:
-	build_state_destroy(&builder.state);
+	if (builder.state.initialized) build_state_destroy(&builder.state);
+	if (builder.streaming_state.initialized) build_state_destroy(&builder.streaming_state);
 	arena_destroy(&builder.state_arena);
 	return result;
 }

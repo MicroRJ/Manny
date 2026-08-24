@@ -331,6 +331,14 @@ static void dispatch_ready(Bob_Executor *executor)
 	platform_unlock_mutex(&executor->mutex);
 }
 
+// TODO(RJ): we could split this into three functions:
+//
+// bob_execution_begin()
+// while (bob_execution_event(& event)) {}
+// bob_execution_end()
+//
+// Potentially one that does all 3 things, the point is, it would get of the callback!
+//
 b32 bob_execute(Bob_Execution *execution, Bob_Exec_Params options)
 {
 	Bob_Executor executor = { .execution = execution, .options = options };

@@ -33,11 +33,11 @@ static b32 build_state_stream_is_valid(const Build_State_Stream *stream)
 
 static void build_state_stream_replace_paths(Build_State_Stream *stream, const Build_State_Stream *replacement)
 {
-	stream->paths = replacement->paths;
-	stream->path_count = replacement->path_count;
-	stream->path_capacity = replacement->path_capacity;
-	stream->ids_by_atom = replacement->ids_by_atom;
-	stream->atom_capacity = replacement->atom_capacity;
+	stream->paths           = replacement->paths;
+	stream->path_count      = replacement->path_count;
+	stream->path_capacity   = replacement->path_capacity;
+	stream->ids_by_atom     = replacement->ids_by_atom;
+	stream->atom_capacity   = replacement->atom_capacity;
 }
 
 void build_state_stream_init(Build_State_Stream *state_stream, Bob_Build *build, Build_State *state)
@@ -333,7 +333,7 @@ static b32 build_state_stream_encode_unlocked(Arena *arena, const Bob_Build *bui
 	*stream = string_from_data(encoder.data, encoder.size);
 	return true;
 
-failure:
+	failure:
 	arena_restore(arena, mark);
 	return false;
 }
@@ -370,9 +370,7 @@ b32 build_state_stream_encode(Build_State_Stream *state_stream, Arena *arena, St
 	if (!build_state_stream_is_valid(state_stream)) return false;
 	Bob_Build *build = state_stream->build;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	b32 result = build_state_stream_compact_unlocked(arena, build, state, state_stream, stream);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
@@ -419,65 +417,76 @@ static Build_State_Stream_Result build_state_stream_replay_unlocked(Bob_Build *b
 		if (!build_state_decode_u32(&content, &operation)) goto invalid;
 
 		switch ((Build_State_Op)operation) {
-		case STATE_OP_INTERN: {
-			u32 path_size;
-			const u8 *path_data;
-			Bob_Path path;
-			if (!build_state_decode_u32(&content, &path_size)) goto invalid;
-			if (path_size == 0 || path_size != content.size - content.cursor) goto invalid;
-			if (!build_state_decode_bytes(&content, &path_data, path_size)) goto invalid;
-			if (!bob_path_resolve(build, bob_build_root(build), string_from_data((void *)path_data, path_size), &path)) goto error;
-			if (build_state_stream_path_id(&decoded_stream, path) != BUILD_STATE_PATH_ID_NONE) goto invalid;
-			if (!build_state_stream_add_replayed_path(arena, &decoded_stream, path)) goto error;
-		} break;
 
-		case STATE_OP_SET: {
-			u32 output;
-			u64 output_stamp;
-			const u8 *fingerprint;
-			u32 dependency_count;
-			u32 existing;
-			Build_State_Task task = {0};
-			if (!build_state_decode_u32(&content, &output)) goto invalid;
-			if (!build_state_decode_u64(&content, &output_stamp)) goto invalid;
-			if (!build_state_decode_bytes(&content, &fingerprint, BOB_FINGERPRINT_SIZE)) goto invalid;
-			if (!build_state_decode_u32(&content, &dependency_count)) goto invalid;
-			if ((u64)dependency_count * 4 != content.size - content.cursor) goto invalid;
-			if (output == BUILD_STATE_PATH_ID_NONE || output > decoded_stream.path_count) goto invalid;
-			Bob_Path output_path = build_state_stream_path(&decoded_stream, output);
-			existing = build_state_task_index(&decoded, output_path);
-			if (existing == UINT32_MAX && decoded.task_count == UINT32_MAX) goto error;
-			if (existing == UINT32_MAX && !build_state_reserve_tasks(&decoded, decoded.task_count + 1)) goto error;
-			task.output = output_path;
-			task.output_stamp = output_stamp;
-			memcpy(task.fingerprint.bytes, fingerprint, sizeof(task.fingerprint.bytes));
-			if (dependency_count) {
-				task.dependencies.items = arena_push_zero_aligned(arena, (u64)dependency_count * sizeof(*task.dependencies.items), _Alignof(Bob_Path));
-				if (!task.dependencies.items) goto error;
-			}
-			for (u32 dependency = 0; dependency < dependency_count; ++dependency) {
-				u32 id;
-				if (!build_state_decode_u32(&content, &id)) goto invalid;
-				if (id == BUILD_STATE_PATH_ID_NONE || id > decoded_stream.path_count) goto invalid;
-				task.dependencies.items[task.dependencies.count++] = build_state_stream_path(&decoded_stream, id);
-			}
-			if (existing == UINT32_MAX) decoded.tasks[decoded.task_count++] = task;
-			else decoded.tasks[existing] = task;
-		} break;
+			case STATE_OP_INTERN:
+			{
+				u32       path_size;
+				const u8 *path_data;
+				Bob_Path  path;
+				if (!build_state_decode_u32(&content, &path_size)) goto invalid;
+				if (path_size == 0 || path_size != content.size - content.cursor) goto invalid;
+				if (!build_state_decode_bytes(&content, &path_data, path_size)) goto invalid;
+				if (!bob_path_resolve(build, bob_build_root(build), string_from_data((void *)path_data, path_size), &path)) goto error;
+				if (build_state_stream_path_id(&decoded_stream, path) != BUILD_STATE_PATH_ID_NONE) goto invalid;
+				if (!build_state_stream_add_replayed_path(arena, &decoded_stream, path)) goto error;
 
-		case STATE_OP_REMOVE: {
-			u32 output;
-			if (!build_state_decode_u32(&content, &output)) goto invalid;
-			if (content.cursor != content.size) goto invalid;
-			if (output == BUILD_STATE_PATH_ID_NONE || output > decoded_stream.path_count) goto invalid;
-			u32 index = build_state_task_index(&decoded, build_state_stream_path(&decoded_stream, output));
-			if (index != UINT32_MAX) {
-				if (index + 1 < decoded.task_count) memmove(decoded.tasks + index, decoded.tasks + index + 1, (u64)(decoded.task_count - index - 1) * sizeof(*decoded.tasks));
-				--decoded.task_count;
-			}
-		} break;
+			} break;
 
-		default: goto invalid;
+			case STATE_OP_SET:
+			{
+				u32       output;
+				u64       output_stamp;
+				const u8 *fingerprint;
+				u32       dependency_count;
+
+				if (!build_state_decode_u32(&content, &output)) goto invalid;
+				if (!build_state_decode_u64(&content, &output_stamp)) goto invalid;
+				if (!build_state_decode_bytes(&content, &fingerprint, BOB_FINGERPRINT_SIZE)) goto invalid;
+				if (!build_state_decode_u32(&content, &dependency_count)) goto invalid;
+
+				if ((u64)dependency_count * 4 != content.size - content.cursor) goto invalid;
+				if (output == BUILD_STATE_PATH_ID_NONE || output > decoded_stream.path_count) goto invalid;
+				Bob_Path output_path = build_state_stream_path(&decoded_stream, output);
+
+				u32 existing = build_state_task_index(&decoded, output_path);
+				if (existing == UINT32_MAX && decoded.task_count == UINT32_MAX) goto error;
+				if (existing == UINT32_MAX && !build_state_reserve_tasks(&decoded, decoded.task_count + 1)) goto error;
+
+				Build_State_Task task = {0};
+				task.output = output_path;
+				task.output_stamp = output_stamp;
+				memcpy(task.fingerprint.bytes, fingerprint, sizeof(task.fingerprint.bytes));
+
+				if (dependency_count) {
+					task.dependencies.items = arena_push_zero_aligned(arena, (u64)dependency_count * sizeof(*task.dependencies.items), _Alignof(Bob_Path));
+					if (!task.dependencies.items) goto error;
+				}
+				for (u32 dependency = 0; dependency < dependency_count; ++dependency) {
+					u32 id;
+					if (!build_state_decode_u32(&content, &id)) goto invalid;
+					if (id == BUILD_STATE_PATH_ID_NONE || id > decoded_stream.path_count) goto invalid;
+					task.dependencies.items[task.dependencies.count++] = build_state_stream_path(&decoded_stream, id);
+				}
+
+				// TODO(RJ): we may want to log this!
+				if (existing == UINT32_MAX) decoded.tasks[decoded.task_count++] = task;
+				else decoded.tasks[existing] = task;
+
+			} break;
+
+			case STATE_OP_REMOVE: {
+				u32 output;
+				if (!build_state_decode_u32(&content, &output)) goto invalid;
+				if (content.cursor != content.size) goto invalid;
+				if (output == BUILD_STATE_PATH_ID_NONE || output > decoded_stream.path_count) goto invalid;
+				u32 index = build_state_task_index(&decoded, build_state_stream_path(&decoded_stream, output));
+				if (index != UINT32_MAX) {
+					if (index + 1 < decoded.task_count) memmove(decoded.tasks + index, decoded.tasks + index + 1, (u64)(decoded.task_count - index - 1) * sizeof(*decoded.tasks));
+					--decoded.task_count;
+				}
+			} break;
+
+			default: goto invalid;
 		}
 
 		if (content.cursor != content.size) goto invalid;
@@ -487,18 +496,18 @@ static Build_State_Stream_Result build_state_stream_replay_unlocked(Bob_Build *b
 	build_state_stream_replace_paths(state_stream, &decoded_stream);
 	return BUILD_STATE_STREAM_OK;
 
-truncated:
+	truncated:
 	build_state_replace_unlocked(state, &decoded);
 	build_state_stream_replace_paths(state_stream, &decoded_stream);
 	return BUILD_STATE_STREAM_TRUNCATED;
 
-invalid:
+	invalid:
 	arena_restore(arena, mark);
 	build_state_replace_unlocked(state, &(Build_State){0});
 	build_state_stream_replace_paths(state_stream, &(Build_State_Stream){0});
 	return BUILD_STATE_STREAM_INVALID;
 
-error:
+	error:
 	arena_restore(arena, mark);
 	build_state_replace_unlocked(state, &(Build_State){0});
 	build_state_stream_replace_paths(state_stream, &(Build_State_Stream){0});
@@ -510,9 +519,7 @@ Build_State_Stream_Result build_state_stream_replay(Build_State_Stream *state_st
 	if (!build_state_stream_is_valid(state_stream)) return BUILD_STATE_STREAM_ERROR;
 	Bob_Build *build = state_stream->build;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	Build_State_Stream_Result result = build_state_stream_replay_unlocked(build, stream, state, state_stream);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
@@ -574,7 +581,7 @@ static b32 build_state_stream_append_set_unlocked(String path, const Bob_Build *
 	end_scratch(scratch);
 	return true;
 
-failure:
+	failure:
 	end_scratch(scratch);
 	return false;
 }
@@ -584,9 +591,7 @@ b32 build_state_stream_append_set(Build_State_Stream *state_stream, String path,
 	if (!build_state_stream_is_valid(state_stream)) return false;
 	Bob_Build *build = state_stream->build;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	b32 result = build_state_stream_append_set_unlocked(path, build, state, state_stream, output, dependencies, output_stamp, fingerprint);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
@@ -607,9 +612,7 @@ b32 build_state_stream_append_remove(Build_State_Stream *state_stream, String pa
 {
 	if (!build_state_stream_is_valid(state_stream)) return false;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	b32 result = build_state_stream_append_remove_unlocked(path, state, state_stream, output);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
@@ -662,7 +665,7 @@ static b32 build_state_stream_save_unlocked(String path, const Bob_Build *build,
 	if (!platform_move_file(temporary.data, path.data, true)) goto done;
 	result = true;
 
-done:
+	done:
 	if (!result && temporary.data) platform_remove_file(temporary.data);
 	if (result) build_state_stream_replace_paths(state_stream, &compacted);
 	else arena_restore(state->arena, state_mark);
@@ -675,39 +678,47 @@ b32 build_state_stream_save(Build_State_Stream *state_stream, String path)
 	if (!build_state_stream_is_valid(state_stream)) return false;
 	Bob_Build *build = state_stream->build;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	b32 result = build_state_stream_save_unlocked(path, build, state, state_stream);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
 
 static Build_State_Load_Result build_state_stream_load_unlocked(Bob_Build *build, String path, Build_State *state, Build_State_Stream *state_stream)
 {
-	Bob_Platform_File_Info info;
-	Arena source_arena = {0};
-	String source;
-	Build_State_Load_Result result;
-	Build_State_Stream_Result stream_result;
+	ASSERT(state);
+	ASSERT(state->arena);
+	ASSERT(state_stream);
+	ASSERT(build);
+
 	if (!state || !state->arena || !state_stream || !build || !string_is_terminated(path) || path.size == 0) return BUILD_STATE_LOAD_ERROR;
+
 	build_state_replace_unlocked(state, &(Build_State){0});
 	build_state_stream_replace_paths(state_stream, &(Build_State_Stream){0});
+
+	Bob_Platform_File_Info info;
 	if (!bob_platform_file_info(path, &info)) return BUILD_STATE_LOAD_MISSING;
 	if (info.size == UINT64_MAX) return BUILD_STATE_LOAD_ERROR;
-	source_arena = arena_create(info.size + 1);
-	arena_set_name(&source_arena, "build state source");
-	if (!source_arena.data) return BUILD_STATE_LOAD_ERROR;
-	if (!bob_platform_read_entire_file(&source_arena, path, &source)) {
-		arena_destroy(&source_arena);
+
+	// NOTE(RJ): switched to using scratch arena instead!
+	// TODO(RJ): ensure scratch arena has enough capacity, otherwise allocate a new one!
+	Scratch scratch = begin_scratch();
+	if (!scratch.arena->data) return BUILD_STATE_LOAD_ERROR;
+
+	String source;
+	if (!bob_platform_read_entire_file(scratch.arena, path, &source)) {
+		end_scratch(scratch);
 		return BUILD_STATE_LOAD_ERROR;
 	}
-	stream_result = build_state_stream_replay_unlocked(build, source, state, state_stream);
+
+	Build_State_Stream_Result stream_result = build_state_stream_replay_unlocked(build, source, state, state_stream);
+
+	Build_State_Load_Result result = BUILD_STATE_LOAD_ERROR;
 	switch (stream_result) {
-	case BUILD_STATE_STREAM_OK: result = BUILD_STATE_LOAD_OK; break;
-	case BUILD_STATE_STREAM_TRUNCATED: result = BUILD_STATE_LOAD_RECOVERED; break;
-	case BUILD_STATE_STREAM_INVALID: result = BUILD_STATE_LOAD_INVALID; break;
-	default: result = BUILD_STATE_LOAD_ERROR; break;
+		case BUILD_STATE_STREAM_OK:        result = BUILD_STATE_LOAD_OK;        break;
+		case BUILD_STATE_STREAM_TRUNCATED: result = BUILD_STATE_LOAD_RECOVERED; break;
+		case BUILD_STATE_STREAM_INVALID:   result = BUILD_STATE_LOAD_INVALID;   break;
+		default: ;
 	}
-	arena_destroy(&source_arena);
+	end_scratch(scratch);
 	return result;
 }
 
@@ -716,8 +727,6 @@ Build_State_Load_Result build_state_stream_load(Build_State_Stream *state_stream
 	if (!build_state_stream_is_valid(state_stream)) return BUILD_STATE_LOAD_ERROR;
 	Bob_Build *build = state_stream->build;
 	Build_State *state = state_stream->state;
-	platform_lock_mutex(&state->mutex);
 	Build_State_Load_Result result = build_state_stream_load_unlocked(build, path, state, state_stream);
-	platform_unlock_mutex(&state->mutex);
 	return result;
 }
