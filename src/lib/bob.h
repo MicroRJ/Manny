@@ -99,9 +99,14 @@ void *bob_allocate(Bob *bob, u64 size, u64 alignment);
 String bob_copy_string(Bob *bob, String string);
 
 Bob_Error bob_add_node(Bob *bob, Bob_Node_Desc description, Bob_Node **node_out);
+
+// TODO(RJ): these are to be removed entirely, nodes will have the deps capacity
+// fixed at creation time, there's no need for node's to remain dynamic. Eventually,
+// nodes will become entirely readonly.
 Bob_Error bob_set_node(Bob *bob, Bob_Node *node, Bob_Node_Desc description);
 Bob_Error bob_set_node_action(Bob *bob, Bob_Node *node, Bob_Node_Function *function, void *user_data);
 Bob_Error bob_add_dependency(Bob *bob, Bob_Node *node, Bob_Node *dependency);
+
 b32 bob_is_sealed(const Bob *bob);
 u32 bob_node_count(const Bob *bob);
 Bob_Node *bob_node_at(const Bob *bob, u32 index);

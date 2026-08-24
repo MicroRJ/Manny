@@ -3,16 +3,6 @@
 
 #include "bob.h"
 
-// TODO(RJ): dynamic arrays aren't needed here because at node construction time, we know how many inputs & outputs.
-// The problem is that we don't know the pointers yet at creation time, so we'd still have to patch the pointers,
-// but, if we used an id system, the user could preserve the node ids, then initially an immutable node.
-// For instance:
-//
-//	node_a := bob_gen_id(bob)
-//	node_b := bob_gen_id(bob)
-//	node_c := bob_gen_id(bob)
-// bob_create_node(bob, node_a, [node_b, node_c])
-//
 typedef struct Bob_Node_Array
 {
 	Bob_Node **items;
