@@ -1,25 +1,34 @@
-#include "script_internal.h"
+#include "script.h"
 
 #include "scripts/elf_adapter.h"
+#include "platform_adapter.h"
+#include "logger.h"
 
 #include <stdarg.h>
 #include <stdio.h>
 
-static const Script_Backend backends[] =
+struct
+{
+	const String           extension;
+	const Script_Interface interface;
+}
+static const backends[] =
 {
 	{
-		.extension = LIT(".elf"),
-		.load = elf_script_load,
-		.destroy = elf_script_destroy,
-		.invoke = elf_script_invoke,
-		.read_build = elf_script_read_build,
-	},
+		.extension  = LIT(".elf"),
+		.interface = {
+			.load       = elf_script_load,
+			.destroy    = elf_script_destroy,
+			.invoke     = elf_script_invoke,
+			.read_build = elf_script_read_build,
+		},
+	}
 };
 
-static const Script_Backend *find_backend(String path)
+static const Script_Interface *find_backend(String path)
 {
 	for (u32 i = 0; i < ARRAY_COUNT(backends); ++i) {
-		if (string_ends_with_insensitive(path, backends[i].extension)) return &backends[i];
+		if (string_ends_with_insensitive(path, backends[i].extension)) return &backends[i].interface;
 	}
 	return NULL;
 }
@@ -40,17 +49,32 @@ b32 script_supports_path(String path)
 	return find_backend(path) != NULL;
 }
 
+// NOTE(RJ): removed path copy from here, didn't seem necessary, no-one stores path!
 Script *script_load(Arena *arena, String path)
 {
 	Script *script = arena_push_zero_aligned(arena, sizeof(*script), _Alignof(Script));
 	script->arena = arena;
-	path = str_push_copy(arena, path);
 	script->backend = find_backend(path);
+
 	if (!script->backend) {
 		script_set_error(script, "no script backend supports '%.*s'", (int)path.size, path.data);
 		return script;
 	}
-	script->loaded = script->backend->load(script, path);
+	// TODO(RJ): just let caller give us the source directly!
+	String source;
+	if (!bob_platform_read_entire_file(script->arena, path, &source)) {
+		log_error("unable to read '%s'", path.data);
+		script_destroy(script);
+		return NULL;
+	}
+	if (source.size > UINT32_MAX) {
+		log_error("script is too large: '%s'", path.data);
+		script_destroy(script);
+		return NULL;
+	}
+
+	// NOTE(RJ): the path is for logging only!
+	script->loaded = script->backend->load(script, path, source);
 	return script;
 }
 

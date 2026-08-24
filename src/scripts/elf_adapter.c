@@ -17,219 +17,11 @@ typedef struct Elf_Script
 }
 Elf_Script;
 
-static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result);
-ELF_FUNCTION(l_bob_build)
-{
-	(void)nargs;
-	(void)nrets;
-	Script *script = elf_get_user_data(S);
-	Script_Build build = {0};
-	if (!read_build_table(script, 1, &build))
-	{
-		script_set_error(script, "%s", build.error);
-		script->failed = true;
-		elf_push_int(S, false);
-		return 1;
-	}
-
-	Script_Options options = script_options_resolve(build.options, script->command_line_options);
-	logger_set_verbosity(options.verbosity);
-	Profile_Scope scope = profile_scope_begin("builder");
-	b32 succeeded = bob_build(build.build, (Bob_Build_Params){
-		.worker_count = options.worker_count,
-		.explain = script->command_line_options.explain,
-	});
-	profile_scope_end(&scope);
-	bob_build_destroy(build.build);
-	if (!succeeded) {
-		script_set_error(script, "build failed");
-		script->failed = true;
-	}
-	elf_push_int(S, succeeded);
-	return 1;
-}
-
-static String stack_string(elf_State *state, elf_i32 index)
-{
-	elf_StrSlice value;
-	if (!elf_to_str(state, index, &value)) return (String){0};
-	return string_from_data(value.data, value.size);
-}
-
-static b32 stack_integer_field(elf_State *state, elf_i32 table, const char *field, elf_Int *value, b32 *present)
-{
-	if (!elf_get_field(state, table, field)) return false;
-	*present = !elf_is_nil(state, -1);
-	b32 result = !*present || elf_to_int(state, -1, value);
-	elf_pop(state, 1);
-	return result;
-}
-
-static b32 set_function(elf_State *state, elf_i32 table, const char *name, elf_Function function)
-{
-	elf_push_fun(state, function);
-	return elf_set_field(state, table, name);
-}
-
-static b32 register_bob_library(elf_State *state)
-{
-	elf_i32 checkpoint = elf_get_top(state);
-	elf_new_table(state);
-	elf_i32 bob = elf_abs_index(state, -1);
-
-	if (!set_function(state, bob, "build", l_bob_build)) goto error;
-	elf_push_cstr(state, BOB_VERSION);
-	if (!elf_set_field(state, bob, "version")) goto error;
-
-	if (!elf_set_global(state, "bob")) goto error;
-	return true;
-
-error:
-	elf_set_top(state, checkpoint);
-	return false;
-}
-
-b32 elf_script_load(Script *script, String path)
-{
-	Elf_Script *elf = arena_push_zero_aligned(script->arena, sizeof(*elf), _Alignof(Elf_Script));
-	elf->state = elf_create_state();
-	script->context = elf;
-	if (!elf->state) {
-		script_set_error(script, "unable to create elf state");
-		return false;
-	}
-	elf_set_user_data(elf->state, script);
-	elf_open_batteries(elf->state);
-	if (!register_bob_library(elf->state)) {
-		script_set_error(script, "unable to register Bob script libraries");
-		return false;
-	}
-	String source;
-	if (!bob_platform_read_entire_file(script->arena, path, &source)) {
-		script_set_error(script, "unable to read '%s'", path.data);
-		return false;
-	}
-	if (source.size > UINT32_MAX) {
-		script_set_error(script, "script is too large: '%s'", path.data);
-		return false;
-	}
-	if (!elf_push_code_source(elf->state, path.data,
-	                          (elf_StrSlice){ source.data, (elf_u32)source.size })) {
-		script_set_error(script, "unable to load '%s'", path.data);
-		return false;
-	}
-	elf_push_nil(elf->state);
-	elf_call(elf->state, 1, 1);
-	if (script->failed) {
-		elf_pop(elf->state, 1);
-		return false;
-	}
-
-	if (elf_type(elf->state, -1) != ELF_VALUE_TYPE_TABLE) {
-		script_set_error(script, "script must return a table");
-		return false;
-	}
-	elf->exports = elf_create_ref(elf->state, -1);
-	elf_pop(elf->state, 1);
-	if (elf->exports == ELF_NO_REF) {
-		script_set_error(script, "unable to retain script exports");
-		return false;
-	}
-
-	elf_i32 checkpoint = elf_get_top(elf->state);
-	elf_push_ref(elf->state, elf->exports);
-	elf_i32 exports = elf_abs_index(elf->state, -1);
-	elf_u32 cursor = 0;
-	while (elf_next(elf->state, exports, &cursor)) {
-		elf_StrSlice name;
-		if (elf_to_str(elf->state, -2, &name) && elf_is_callable(elf->state, -1)) ++script->functions.count;
-		elf_pop(elf->state, 2);
-	}
-	script->functions.items = arena_push_zero_aligned(script->arena, script->functions.count * sizeof(String), _Alignof(String));
-	cursor = 0;
-	u32 function_index = 0;
-	while (elf_next(elf->state, exports, &cursor))
-	{
-		elf_StrSlice slice;
-		if (elf_to_str(elf->state, -2, &slice) && elf_is_callable(elf->state, -1)) {
-			String name = string_from_data(slice.data, slice.size);
-			script->functions.items[function_index++] = str_push_copy(script->arena, name);
-		}
-		elf_pop(elf->state, 2);
-	}
-	elf_set_top(elf->state, checkpoint);
-	return true;
-}
-
-void elf_script_destroy(Script *script)
-{
-	Elf_Script *elf = script->context;
-	if (elf->exports != ELF_NO_REF) elf_release_ref(elf->state, elf->exports);
-	if (elf->state) elf_destroy_state(elf->state);
-	elf->exports = ELF_NO_REF;
-	elf->state = NULL;
-}
-
-b32 elf_script_invoke(Script *script, String name)
-{
-	Elf_Script *elf = script->context;
-	elf_i32 checkpoint = elf_get_top(elf->state);
-	if (!elf_push_ref(elf->state, elf->exports)) return false;
-	elf_i32 exports = elf_abs_index(elf->state, -1);
-	if (!elf_get_field(elf->state, exports, name.data) || !elf_is_callable(elf->state, -1)) {
-		elf_set_top(elf->state, checkpoint);
-		return false;
-	}
-	elf_push_nil(elf->state);
-	elf_call(elf->state, 1, 0);
-	elf_set_top(elf->state, checkpoint);
-	return true;
-}
-
-static String copy_stack_string(Arena *arena, elf_State *state, elf_i32 index)
-{
-	String string = stack_string(state, index);
-	return string.data ? str_push_copy(arena, string) : (String){0};
-}
-
-static b32 copy_string_array_field(elf_State *state, Arena *arena, elf_i32 table, const char *field_name, String task_name, String_Array *result, char *error, size_t error_size)
-{
-	elf_i32 checkpoint = elf_get_top(state);
-	*result = (String_Array){0};
-	if (!elf_get_field(state, table, field_name)) return false;
-	if (elf_is_nil(state, -1)) {
-		elf_set_top(state, checkpoint);
-		return true;
-	}
-	elf_i32 array = elf_abs_index(state, -1);
-	elf_u32 count = 0;
-	if (!elf_length(state, array, &count)) {
-		snprintf(error, error_size, "%s for '%s' must be a table", field_name, task_name.data);
-		elf_set_top(state, checkpoint);
-		return false;
-	}
-	result->count = count;
-	result->items = arena_push_zero_aligned(arena, count * sizeof(*result->items), _Alignof(String));
-	for (elf_u32 i = 0; i < count; ++i)
-	{
-		elf_get_index(state, array, i);
-		result->items[i] = copy_stack_string(arena, state, -1);
-		elf_pop(state, 1);
-		if (!result->items[i].data) {
-			snprintf(error, error_size, "%s for '%s' must contain strings", field_name, task_name.data);
-			elf_set_top(state, checkpoint);
-			return false;
-		}
-	}
-	elf_set_top(state, checkpoint);
-	return true;
-}
-
 typedef struct Ref_List
 {
-	Arena *arena;
+	Arena   *arena;
 	elf_Ref *items;
-	u32 count;
+	u32      count;
 }
 Ref_List;
 
@@ -258,13 +50,83 @@ static b32 ref_list_add(Ref_List *list, elf_State *state, elf_i32 value)
 	return true;
 }
 
+static String stack_string(elf_State *state, elf_Index index)
+{
+	elf_StrSlice value;
+	if (!elf_to_str(state, index, &value)) return (String){0};
+	return string_from_data(value.data, value.size);
+}
+
+static b32 stack_integer_field(elf_State *state, elf_i32 table, const char *field, elf_Int *value, b32 *present)
+{
+	if (!elf_get_field(state, table, field)) return false;
+	*present = !elf_is_nil(state, -1);
+	b32 result = !*present || elf_to_int(state, -1, value);
+	elf_pop(state, 1);
+	return result;
+}
+
+static String copy_stack_string(Arena *arena, elf_State *state, elf_i32 index)
+{
+	String string = stack_string(state, index);
+	return string.data ? str_push_copy(arena, string) : (String){0};
+}
+
+static b32 copy_string_array_field(elf_State *state, Arena *arena, elf_Index table, const char *field_name, String task_name, String_Array *result, char *error, size_t error_size)
+{
+	elf_Index checkpoint = elf_get_top(state);
+	*result = (String_Array){0};
+
+	if (!elf_get_field(state, table, field_name)) return false;
+	if (elf_is_nil(state, -1)) {
+		elf_set_top(state, checkpoint);
+		return true;
+	}
+
+	elf_Index array = elf_abs_index(state, -1);
+	elf_u32 count = 0;
+	if (!elf_length(state, array, &count)) {
+		snprintf(error, error_size, "%s for '%s' must be a table", field_name, task_name.data);
+		elf_set_top(state, checkpoint);
+		return false;
+	}
+
+	result->count = count;
+	result->items = arena_push_zero_aligned(arena, count * sizeof(*result->items), _Alignof(String));
+
+	for (elf_u32 i = 0; i < count; ++i)
+	{
+		elf_get_index(state, array, i);
+		result->items[i] = copy_stack_string(arena, state, -1);
+		elf_pop(state, 1);
+
+		if (!result->items[i].data) {
+			snprintf(error, error_size, "%s for '%s' must contain strings", field_name, task_name.data);
+			elf_set_top(state, checkpoint);
+			return false;
+		}
+	}
+	elf_set_top(state, checkpoint);
+	return true;
+}
+
+static b32 set_function(elf_State *state, elf_i32 table, const char *name, elf_Function function)
+{
+	elf_push_fun(state, function);
+	return elf_set_field(state, table, name);
+}
+
 static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 {
-	if (!script || !result) return false;
+	ASSERT(script);
+	ASSERT(result);
+
 	Elf_Script *elf = script->context;
 	elf_State *state = elf->state;
+
 	elf_i32 checkpoint = elf_get_top(state);
 	root = elf_abs_index(state, root);
+
 	Scratch scratch = begin_scratch();
 	Ref_List task_tables = { .arena = scratch.arena };
 	String build_root = {0};
@@ -374,15 +236,20 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 	for (u32 i = 0; i < task_tables.count; ++i)
 	{
 		elf_i32 task_checkpoint = elf_get_top(state);
+
 		elf_push_ref(state, task_tables.items[i]);
 		elf_i32 description = elf_abs_index(state, -1);
+
 		Bob_Task_Desc task = {0};
+
 		elf_get_field(state, description, "name");
 		task.name = copy_stack_string(scratch.arena, state, -1);
 		elf_pop(state, 1);
+
 		elf_get_field(state, description, "command_line");
 		task.command_line = copy_stack_string(scratch.arena, state, -1);
 		elf_pop(state, 1);
+
 		if (!task.name.data || !task.command_line.data) {
 			snprintf(result->error, sizeof(result->error), "task %u requires string fields 'name' and 'command_line'", i);
 			goto cleanup;
@@ -477,3 +344,141 @@ b32 elf_script_read_build(Script *script, Script_Build *result)
 	elf_set_top(elf->state, checkpoint);
 	return success;
 }
+
+ELF_FUNCTION(l_bob_build)
+{
+	(void)nargs;
+	(void)nrets;
+	Script *script = elf_get_user_data(S);
+	Script_Build build = {0};
+	if (!read_build_table(script, 1, &build))
+	{
+		script_set_error(script, "%s", build.error);
+		script->failed = true;
+		elf_push_int(S, false);
+		return 1;
+	}
+
+	Script_Options options = script_options_resolve(build.options, script->command_line_options);
+	logger_set_verbosity(options.verbosity);
+	Profile_Scope scope = profile_scope_begin("builder");
+	b32 succeeded = bob_build(build.build, (Bob_Build_Params){
+		.worker_count = options.worker_count,
+		.explain = script->command_line_options.explain,
+	});
+	profile_scope_end(&scope);
+	bob_build_destroy(build.build);
+	if (!succeeded) {
+		script_set_error(script, "build failed");
+		script->failed = true;
+	}
+	elf_push_int(S, succeeded);
+	return 1;
+}
+
+static b32 register_bob_library(elf_State *state)
+{
+	elf_i32 checkpoint = elf_get_top(state);
+	elf_new_table(state);
+	elf_i32 bob = elf_abs_index(state, -1);
+
+	if (!set_function(state, bob, "build", l_bob_build)) goto error;
+	elf_push_cstr(state, BOB_VERSION);
+	if (!elf_set_field(state, bob, "version")) goto error;
+
+	if (!elf_set_global(state, "bob")) goto error;
+	return true;
+
+error:
+	elf_set_top(state, checkpoint);
+	return false;
+}
+
+b32 elf_script_load(Script *script, String path, String source)
+{
+	Elf_Script *elf = arena_push_zero_aligned(script->arena, sizeof(*elf), _Alignof(Elf_Script));
+	elf->state = elf_create_state();
+	script->context = elf;
+	if (!elf->state) {
+		script_set_error(script, "unable to create elf state");
+		return false;
+	}
+	elf_set_user_data(elf->state, script);
+	elf_open_batteries(elf->state);
+	if (!register_bob_library(elf->state)) {
+		script_set_error(script, "unable to register Bob script libraries");
+		return false;
+	}
+
+	if (!elf_push_code_source(elf->state, path.data, (elf_StrSlice){ source.data, (elf_u32)source.size })) {
+		script_set_error(script, "unable to load '%s'", path.data);
+		return false;
+	}
+	elf_push_nil(elf->state);
+	elf_call(elf->state, 1, 1);
+	if (script->failed) {
+		elf_pop(elf->state, 1);
+		return false;
+	}
+
+	if (elf_type(elf->state, -1) != ELF_VALUE_TYPE_TABLE) {
+		script_set_error(script, "script must return a table");
+		return false;
+	}
+	elf->exports = elf_create_ref(elf->state, -1);
+	elf_pop(elf->state, 1);
+	if (elf->exports == ELF_NO_REF) {
+		script_set_error(script, "unable to retain script exports");
+		return false;
+	}
+
+	elf_i32 checkpoint = elf_get_top(elf->state);
+	elf_push_ref(elf->state, elf->exports);
+	elf_i32 exports = elf_abs_index(elf->state, -1);
+	elf_u32 cursor = 0;
+	while (elf_next(elf->state, exports, &cursor)) {
+		elf_StrSlice name;
+		if (elf_to_str(elf->state, -2, &name) && elf_is_callable(elf->state, -1)) ++script->functions.count;
+		elf_pop(elf->state, 2);
+	}
+	script->functions.items = arena_push_zero_aligned(script->arena, script->functions.count * sizeof(String), _Alignof(String));
+	cursor = 0;
+	u32 function_index = 0;
+	while (elf_next(elf->state, exports, &cursor))
+	{
+		elf_StrSlice slice;
+		if (elf_to_str(elf->state, -2, &slice) && elf_is_callable(elf->state, -1)) {
+			String name = string_from_data(slice.data, slice.size);
+			script->functions.items[function_index++] = str_push_copy(script->arena, name);
+		}
+		elf_pop(elf->state, 2);
+	}
+	elf_set_top(elf->state, checkpoint);
+	return true;
+}
+
+void elf_script_destroy(Script *script)
+{
+	Elf_Script *elf = script->context;
+	if (elf->exports != ELF_NO_REF) elf_release_ref(elf->state, elf->exports);
+	if (elf->state) elf_destroy_state(elf->state);
+	elf->exports = ELF_NO_REF;
+	elf->state = NULL;
+}
+
+b32 elf_script_invoke(Script *script, String name)
+{
+	Elf_Script *elf = script->context;
+	elf_i32 checkpoint = elf_get_top(elf->state);
+	if (!elf_push_ref(elf->state, elf->exports)) return false;
+	elf_i32 exports = elf_abs_index(elf->state, -1);
+	if (!elf_get_field(elf->state, exports, name.data) || !elf_is_callable(elf->state, -1)) {
+		elf_set_top(elf->state, checkpoint);
+		return false;
+	}
+	elf_push_nil(elf->state);
+	elf_call(elf->state, 1, 0);
+	elf_set_top(elf->state, checkpoint);
+	return true;
+}
+

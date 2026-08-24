@@ -4,7 +4,6 @@
 #include "bob_build.h"
 #include "cmd_options.h"
 
-typedef struct Script Script;
 
 typedef struct Script_Options
 {
@@ -22,6 +21,38 @@ typedef struct Script_Build
 	char error[256];
 }
 Script_Build;
+
+typedef struct Script Script;
+typedef struct Script_Interface
+{
+	// NOTE(RJ): the path/name is for logging!
+	b32       (*load)(Script *script, String path, String source);
+	void   (*destroy)(Script *script);
+
+	// NOTE(RJ): invoke a script function
+	b32     (*invoke)(Script *script, String name);
+
+	// NOTE(RJ): this is really no longer in use, initially the script would only
+	// return a task table, but now we actually just let the script call into us.
+	b32 (*read_build)(Script *script, Script_Build *result);
+}
+Script_Interface;
+
+typedef struct Script Script;
+struct Script
+{
+	Arena *arena;
+	const Script_Interface *backend;
+	void *context;
+	String_Array functions;
+	String error;
+	Cmd_Options command_line_options;
+	b32 loaded;
+	b32 failed;
+};
+
+void script_set_error(Script *script, const char *format, ...);
+
 
 static inline Script_Options script_options_resolve(Script_Options script, Cmd_Options command_line)
 {

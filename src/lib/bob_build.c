@@ -1,6 +1,5 @@
 #include "bob_build_internal.h"
-#include "build_state.h"
-#include "build_state_stream.h"
+#include "build_record_stream.h"
 #include "compiler_command.h"
 #include "logger.h"
 #include "make_depfile.h"
@@ -31,11 +30,11 @@ Bob_Rebuild_Reason;
 
 struct Bob_Build
 {
-	Arena         arena;
-	Bob          *graph;
+	Arena          arena;
+	Bob           *graph;
 	Bob_Execution *execution;
-	Bob_Interner *interner;
-	Bob_Path      root;
+	Bob_Interner  *interner;
+	Bob_Path       root;
 };
 
 typedef struct Build_Task
@@ -91,9 +90,8 @@ typedef struct Bob_Builder
 	Bob                *bob;
 	Bob_Path            state_path;
 
-	Build_State         state;
-	Build_State         streaming_state;
-	Build_State_Stream  state_stream;
+	Build_Record_Stream   record_stream;
+	Build_Record_Snapshot record_snapshot;
 
 	Arena               state_arena;
 	void               *event_user_data;
@@ -334,8 +332,8 @@ static Bob_Rebuild_Decision task_rebuild_decision(Bob_Builder *builder, const Bo
 	if (outputs->count > 0) {
 		Bob_Path output_path = outputs->items[0];
 		String output = bob_path_string(builder->build, output_path);
-		Build_State_Task state_task;
-		if (!build_state_get(&builder->state, output_path, &state_task)) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
+		Build_Record_Task state_task;
+		if (!build_record_snapshot_get(&builder->record_snapshot, output_path, &state_task)) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
 		if (state_task.output_stamp != primary_output_stamp) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_STATE_CHANGED, .path = output, .rebuild = true };
 		if (memcmp(state_task.fingerprint.bytes, task->fingerprint.bytes, BOB_FINGERPRINT_SIZE) != 0) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_FINGERPRINT_CHANGED, .path = output, .rebuild = true };
 		for (u32 i = 0; i < state_task.dependencies.count; ++i) {
@@ -549,7 +547,7 @@ static void record_task_completion_state(Bob_Builder *builder, const Bob_Build_C
 	String state_path = bob_path_string(builder->build, builder->state_path);
 
 	if (!succeeded || (completion->task->tracks_dependencies && !completion->dependency_state_valid)) {
-		if (!build_state_stream_append_remove(&builder->state_stream, state_path, output_path)) builder->internal_error = true;
+		if (!build_record_stream_append_remove(&builder->record_stream, state_path, output_path)) builder->internal_error = true;
 		else builder->state_changed = true;
 
 		if (succeeded && completion->task->tracks_dependencies && !completion->dependency_state_valid) {
@@ -560,10 +558,17 @@ static void record_task_completion_state(Bob_Builder *builder, const Bob_Build_C
 	Bob_Platform_File_Info info;
 	String output = bob_path_string(builder->build, output_path);
 	u64 output_stamp = bob_platform_file_info(output, &info) && !info.is_directory ? (u64)info.modified_unix_ms : 0;
-	if (!build_state_stream_append_set(&builder->state_stream, state_path, output_path, completion->dependencies, output_stamp, completion->task->fingerprint)) builder->internal_error = true;
+	Build_Record_Task record = {
+		.output = output_path,
+		.output_stamp = output_stamp,
+		.fingerprint = completion->task->fingerprint,
+		.dependencies = completion->dependencies,
+	};
+	if (!build_record_stream_append_set(&builder->record_stream, state_path, record)) builder->internal_error = true;
 	else builder->state_changed = true;
 }
 
+// TODO(RJ): this is to be removed!
 static void build_task_event(Bob_Event event, void *user_data)
 {
 	Bob_Builder *builder = user_data;
@@ -633,27 +638,25 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		result = false;
 		goto cleanup;
 	}
-	if (!build_state_init(&builder.streaming_state, &builder.state_arena)) {
+	if (!build_record_stream_init(&builder.record_stream, &builder.state_arena, build)) {
 		result = false;
 		goto cleanup;
 	}
 
-	build_state_stream_init(&builder.state_stream, build, &builder.streaming_state);
-
 	if (builder.state_tracking) {
 		String state_path = bob_path_string(build, builder.state_path);
-		Build_State_Load_Result load_result = build_state_stream_load(&builder.state_stream, state_path);
-		if (load_result == BUILD_STATE_LOAD_ERROR) {
+		Build_Record_Result load_result = build_record_stream_load(&builder.record_stream, state_path);
+		if (load_result == BUILD_RECORD_ERROR) {
 			log_warning("could not load Bob build state");
 			result = false;
 			goto cleanup;
 		}
-		else if (load_result == BUILD_STATE_LOAD_INVALID) {
+		else if (load_result == BUILD_RECORD_INVALID) {
 			log_warning("ignoring invalid Bob build state");
-			build_state_clear(&builder.streaming_state);
+			build_record_stream_clear(&builder.record_stream);
 		}
-		if (load_result != BUILD_STATE_LOAD_OK) {
-			if (!build_state_stream_save(&builder.state_stream, state_path)) {
+		if (load_result != BUILD_RECORD_OK) {
+			if (!build_record_stream_compact(&builder.record_stream, state_path)) {
 				log_warning("could not prepare Bob build state");
 				result = false;
 				goto cleanup;
@@ -661,12 +664,7 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		}
 	}
 
-	// NOTE(RJ): create a copy of the build state for threads to read safely
-	builder.state = builder.streaming_state;
-	builder.state.tasks = arena_push_copy_aligned(&builder.state_arena
-	, builder.state.task_count * sizeof(* builder.state.tasks), _Alignof(Build_State_Task), builder.state.tasks);
-	builder.state.task_capacity = builder.state.task_count;
-	if (builder.state.task_count > 0 && !builder.state.tasks) {
+	if (!build_record_stream_snapshot(&builder.record_stream, &builder.state_arena, &builder.record_snapshot)) {
 		result = false;
 		goto cleanup;
 	}
@@ -686,15 +684,14 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 	});
 	if (builder.internal_error) result = false;
 	if (result && builder.state_tracking && builder.state_changed) {
-		if (!build_state_stream_save(&builder.state_stream, bob_path_string(build, builder.state_path))) {
+		if (!build_record_stream_compact(&builder.record_stream, bob_path_string(build, builder.state_path))) {
 			log_warning("could not compact Bob build state");
 			result = false;
 		}
 	}
 
 cleanup:
-	if (builder.state.initialized) build_state_destroy(&builder.state);
-	if (builder.streaming_state.initialized) build_state_destroy(&builder.streaming_state);
+	if (builder.record_stream.initialized) build_record_stream_destroy(&builder.record_stream);
 	arena_destroy(&builder.state_arena);
 	return result;
 }

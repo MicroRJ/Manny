@@ -7,8 +7,8 @@ core_sources := {
 	{ name = "bob",                path = "src/lib/bob.c"                   },
 	{ name = "bob_execution",      path = "src/lib/bob_execution.c"         },
 	{ name = "bob_build",          path = "src/lib/bob_build.c"             },
-	{ name = "build_state",        path = "src/lib/build_state.c"           },
-	{ name = "build_state_stream", path = "src/lib/build_state_stream.c"    },
+	{ name = "build_record",        path = "src/lib/build_record.c"         },
+	{ name = "build_record_stream", path = "src/lib/build_record_stream.c"  },
 	{ name = "compiler_command",   path = "src/lib/compiler_command.c"       },
 	{ name = "make_depfile",       path = "src/lib/make_depfile.c"           },
 	{ name = "vcvars_cache",       path = "src/lib/vcvars_cache.c"          },
@@ -36,18 +36,22 @@ include_dirs := {
 compile_options := " /nologo /std:c11 /W4 /WX /Zi /Od"
 blake3_compile_options := " /DBLAKE3_NO_SSE2 /DBLAKE3_NO_SSE41 /DBLAKE3_NO_AVX2 /DBLAKE3_NO_AVX512 /DBLAKE3_USE_NEON=0"
 
-
-
-include_options := " ":join(include_dirs:map(fun(directory) {
-	ret f"/I${directory}"
-}))
-include_options = f" ${include_options}"
+include_options := " " + " ":join(include_dirs:map(fun(directory) ret f"/I${directory}"))
 
 prepare := {
 	name = "prepare object directory",
 	command_line = "cmd /c if not exist build\\obj mkdir build\\obj",
 	inputs = {},
 	outputs = { "build/obj" },
+	include_dirs = {},
+	dependencies = {},
+}
+
+prepare_tests := {
+	name = "prepare test directory",
+	command_line = "cmd /c if not exist build\\tests mkdir build\\tests",
+	inputs = {},
+	outputs = { "build/tests" },
 	include_dirs = {},
 	dependencies = {},
 }
@@ -140,43 +144,76 @@ build_bob := {
 	dependencies = bob_dependencies,
 }
 
-tests_compiled := compile_source({
-	name = "tests", source = "tests/tests.c", extra_options = "",
-})
-test_dependencies := common_tasks:clone():extend({
-	tests_compiled.task,
-	build_elf,
-	build_platform,
-})
-test_inputs := common_objects:clone():extend({
-	tests_compiled.object, "elf/build/elf.lib", "elf/build/elf_batteries.lib", "platform/build/platform.lib",
-})
-
-build_tests := {
-	name = "link tests",
-	command_line = f"${cc} /nologo${common_object_options} ${tests_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Febuild\\tests.exe /link /DEBUG /PDB:build\\tests.pdb",
-	inputs = test_inputs,
-	outputs = { "build/tests.exe" },
-	include_dirs = {},
-	dependencies = test_dependencies,
+test_suites := {
+	{ name = "base",     source = "tests/test_base.c"     },
+	{ name = "graph",    source = "tests/test_graph.c"    },
+	{ name = "build",    source = "tests/test_build.c"    },
+	{ name = "record",   source = "tests/test_record.c"   },
+	{ name = "compiler", source = "tests/test_compiler.c" },
+	{ name = "script",   source = "tests/test_script.c"   },
 }
 
-run_tests := {
-	name = "run tests",
-	command_line = "build\\tests.exe --test",
-	inputs = { "build/tests.exe" },
-	outputs = {},
-	include_dirs = {},
-	dependencies = { build_tests },
+test_support := compile_source({
+	name = "test_support", source = "tests/test.c", extra_options = "",
+})
+
+test_targets := {}
+previous_test := {}
+for suite := test_suites[...] ? {
+	compiled := compile_source({
+		name = f"test_${suite.name}", source = suite.source, extra_options = "",
+	})
+	executable := f"build/tests/test_${suite.name}.exe"
+	pdb := f"build/tests/test_${suite.name}.pdb"
+	link := {
+		name = f"link ${suite.name} tests",
+		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
+		inputs = common_objects:clone():extend({
+			test_support.object, compiled.object,
+			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "platform/build/platform.lib",
+		}),
+		outputs = { executable },
+		include_dirs = {},
+		dependencies = common_tasks:clone():extend({
+			test_support.task, compiled.task, prepare_tests, build_elf, build_platform,
+		}),
+	}
+	run := {
+		name = f"run ${suite.name} tests",
+		command_line = executable,
+		inputs = { executable },
+		outputs = {},
+		include_dirs = {},
+		dependencies = { link }:extend(previous_test),
+	}
+	test_targets = { run }
+	previous_test = { run }
 }
 
+stress_compiled := compile_source({
+	name = "test_record_stress", source = "tests/test_record_stress.c", extra_options = "",
+})
+stress_executable := "build/tests/test_record_stress.exe"
+build_stress_tests := {
+	name = "link record stress tests",
+	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
+	inputs = common_objects:clone():extend({
+		test_support.object, stress_compiled.object,
+		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "platform/build/platform.lib",
+	}),
+	outputs = { stress_executable },
+	include_dirs = {},
+	dependencies = common_tasks:clone():extend({
+		test_support.task, stress_compiled.task, prepare_tests, build_elf, build_platform,
+	}),
+}
 run_stress_tests := {
-	name = "run stress tests",
-	command_line = "build\\tests.exe --stress",
-	inputs = { "build/tests.exe" },
+	name = "run record stress tests",
+	command_line = stress_executable,
+	inputs = { stress_executable },
 	outputs = {},
 	include_dirs = {},
-	dependencies = { build_tests },
+	dependencies = { build_stress_tests },
 }
 
 options := {
@@ -195,7 +232,7 @@ entries.build = fun() {
 
 entries.test = fun() {
 	ret bob.build({
-		targets = { run_tests },
+		targets = test_targets,
 		options = options,
 	})
 }
