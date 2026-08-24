@@ -35,7 +35,7 @@ void *bob_allocate(Bob *bob, u64 size, u64 alignment)
 String bob_copy_string(Bob *bob, String string)
 {
 	if (!bob || bob->sealed || (!string.data && string.size)) return (String){0};
-	return arena_push_string_copy(&bob->arena, string);
+	return str_push_copy(&bob->arena, string);
 }
 
 static b32 node_array_push(Bob *bob, Bob_Node_Array *array, Bob_Node *node)
@@ -53,10 +53,9 @@ b32 bob_valid_node(const Bob *bob, const Bob_Node *node)
 Bob *bob_create(void)
 {
 	Arena arena = arena_create(0);
-	Bob *bob;
 	if (!arena.data) return NULL;
 	arena_set_name(&arena, "Bob graph");
-	bob = arena_push_zero_aligned(&arena, sizeof(*bob), _Alignof(Bob));
+	Bob *bob = arena_push_zero_aligned(&arena, sizeof(*bob), _Alignof(Bob));
 	if (!bob) {
 		arena_destroy(&arena);
 		return NULL;
@@ -67,31 +66,42 @@ Bob *bob_create(void)
 
 void bob_destroy(Bob *bob)
 {
-	Arena arena;
-	if (!bob) return;
+	ASSERT(bob);
 	ASSERT(bob->execution_count == 0);
-	arena = bob->arena;
+	Arena arena = bob->arena;
 	arena_destroy(&arena);
 }
 
 Bob_Error bob_add_node(Bob *bob, Bob_Node_Desc description, Bob_Node **node_out)
 {
-	Bob_Node *node;
-	if (!bob || !description.name.data || !node_out) return BOB_ERROR_INVALID_NODE;
+	ASSERT(bob);
+
+	if (!description.name.data || !node_out) return BOB_ERROR_INVALID_NODE;
+	// TODO(RJ): we can remove this check once we make nodes truly immutable!
 	if (bob->sealed) return BOB_ERROR_GRAPH_SEALED;
-	if (!bob_reserve(bob, (void **)&bob->nodes, sizeof(*bob->nodes), bob->node_count, &bob->node_capacity, bob->node_count + 1, _Alignof(Bob_Node *))) return BOB_ERROR_OUT_OF_MEMORY;
-	node = bob_push(bob, sizeof(*node), _Alignof(Bob_Node));
+
+	if (!bob_reserve(bob, (void **)&bob->nodes, sizeof(*bob->nodes), bob->node_count, &bob->node_capacity, bob->node_count + 1, _Alignof(Bob_Node *)))
+	{
+		return BOB_ERROR_OUT_OF_MEMORY;
+	}
+
+	Bob_Node *node = bob_push(bob, sizeof(*node), _Alignof(Bob_Node));
 	if (!node) return BOB_ERROR_OUT_OF_MEMORY;
-	node->name = arena_push_string_copy(&bob->arena, description.name);
+
+	node->name = str_push_copy(&bob->arena, description.name);
 	if (!node->name.data) return BOB_ERROR_OUT_OF_MEMORY;
+
 	node->index = bob->node_count;
 	node->function = description.function;
 	node->user_data = description.user_data;
-	bob->nodes[bob->node_count++] = node;
+
+	bob->nodes[bob->node_count ++] = node;
+
 	*node_out = node;
 	return BOB_OK;
 }
 
+// TODO(RJ): remove this entirely, only tests use this thing for whatever reason!
 Bob_Error bob_set_node(Bob *bob, Bob_Node *node, Bob_Node_Desc description)
 {
 	String name;
@@ -99,7 +109,7 @@ Bob_Error bob_set_node(Bob *bob, Bob_Node *node, Bob_Node_Desc description)
 	if (bob->sealed) return BOB_ERROR_GRAPH_SEALED;
 	name = node->name;
 	if (description.name.data) {
-		name = arena_push_string_copy(&bob->arena, description.name);
+		name = str_push_copy(&bob->arena, description.name);
 		if (!name.data) return BOB_ERROR_OUT_OF_MEMORY;
 	}
 	node->name = name;

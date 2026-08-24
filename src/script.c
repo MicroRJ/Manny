@@ -44,7 +44,7 @@ Script *script_load(Arena *arena, String path)
 {
 	Script *script = arena_push_zero_aligned(arena, sizeof(*script), _Alignof(Script));
 	script->arena = arena;
-	path = arena_push_string_copy(arena, path);
+	path = str_push_copy(arena, path);
 	script->backend = find_backend(path);
 	if (!script->backend) {
 		script_set_error(script, "no script backend supports '%.*s'", (int)path.size, path.data);
@@ -101,7 +101,7 @@ b32 script_invoke(Script *script, String name)
 	}
 	script->failed = false;
 	Scratch scratch = begin_different_scratch(script->arena);
-	String terminated_name = arena_push_string_copy(scratch.arena, name);
+	String terminated_name = str_push_copy(scratch.arena, name);
 	b32 result = script->backend->invoke(script, terminated_name);
 	end_scratch(scratch);
 	return result && !script->failed;

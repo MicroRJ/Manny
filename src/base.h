@@ -92,13 +92,18 @@ char *arena_push_data(Arena *arena, const void *data, u64 size);
 
 
 
+// TODO(RJ): the problem with this is that you may want to append additional
+// stuff to the string inside another function, you can pass in the arena but then it
+// gets a little sketchy, maybe we should just have an arena backed String_Builder.
 char *arena_append_text(Arena *arena, const char *text);
 char *arena_append_str(Arena *arena, String string);
 char *arena_append_char(Arena *arena, char character);
 void arena_push_repeat(Arena *arena, char character, u64 count);
 char *arena_appendfv(Arena *arena, const char *format, va_list arguments);
 char *arena_appendf(Arena *arena, const char *format, ...);
+// TODO(RJ): most of the people calling this do arena_finalize_string right after
 String arena_string_from(Arena *arena, void *start);
+// TODO(RJ): this is a terrible API design, instead it should just return the String already terminated!
 void arena_finalize_string(Arena *arena, String string);
 
 Scratch begin_scratch(void);
@@ -117,7 +122,7 @@ String_Array string_split_lines(Arena *arena, String string);
 String_Array string_split_block(Arena *arena, String string);
 b32 string_split_first(String string, char separator, String *left, String *right);
 String string_trim_whitespace(String string);
-String arena_push_string_copy(Arena *arena, String string);
+String str_push_copy(Arena *arena, String string);
 String arena_push_cstring(Arena *arena, const char *text);
 b32 string_equal_insensitive(String left, String right);
 b32 string_starts_with(String text, String prefix);

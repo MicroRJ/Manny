@@ -142,7 +142,7 @@ Bob_Atom bob_interner_intern(Bob_Interner *interner, String value)
 	if (atom.id == 0) {
 		Bob_Interner_Table original = *table;
 		u64 mark = arena_mark(interner->arena);
-		String copy = arena_push_string_copy(interner->arena, value);
+		String copy = str_push_copy(interner->arena, value);
 		if (!copy.data || !bob_interner_reserve_entries(interner, table->entry_count + 1) || !bob_interner_reserve_slot(interner)) {
 			*table = original;
 			arena_restore(interner->arena, mark);

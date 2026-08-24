@@ -647,7 +647,7 @@ static b32 build_state_stream_save_unlocked(String path, const Bob_Build *build,
 	if (!arena.data) goto done;
 	parent = build_state_parent_directory(path);
 	if (parent.size) {
-		parent = arena_push_string_copy(&arena, parent);
+		parent = str_push_copy(&arena, parent);
 		if (!parent.data || !platform_create_directories(parent.data)) goto done;
 	}
 	{

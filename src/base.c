@@ -371,7 +371,7 @@ String string_trim_whitespace(String string)
 	return string_slice(string, start, end - start);
 }
 
-String arena_push_string_copy(Arena *arena, String string)
+String str_push_copy(Arena *arena, String string)
 {
 	char *data = arena_push(arena, string.size + 1);
 	if (!data) return (String){0};
@@ -382,7 +382,7 @@ String arena_push_string_copy(Arena *arena, String string)
 
 String arena_push_cstring(Arena *arena, const char *text)
 {
-	return arena_push_string_copy(arena, string_from_cstring(text));
+	return str_push_copy(arena, string_from_cstring(text));
 }
 
 b32 string_equal(String a, String b)

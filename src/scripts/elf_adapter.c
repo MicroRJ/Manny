@@ -153,7 +153,7 @@ b32 elf_script_load(Script *script, String path)
 		elf_StrSlice slice;
 		if (elf_to_str(elf->state, -2, &slice) && elf_is_callable(elf->state, -1)) {
 			String name = string_from_data(slice.data, slice.size);
-			script->functions.items[function_index++] = arena_push_string_copy(script->arena, name);
+			script->functions.items[function_index++] = str_push_copy(script->arena, name);
 		}
 		elf_pop(elf->state, 2);
 	}
@@ -189,7 +189,7 @@ b32 elf_script_invoke(Script *script, String name)
 static String copy_stack_string(Arena *arena, elf_State *state, elf_i32 index)
 {
 	String string = stack_string(state, index);
-	return string.data ? arena_push_string_copy(arena, string) : (String){0};
+	return string.data ? str_push_copy(arena, string) : (String){0};
 }
 
 static b32 copy_string_array_field(elf_State *state, Arena *arena, elf_i32 table, const char *field_name, String task_name, String_Array *result, char *error, size_t error_size)

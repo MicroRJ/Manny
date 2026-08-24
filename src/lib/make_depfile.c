@@ -164,7 +164,7 @@ b32 make_depfile_parse(Arena *arena, String contents, String_Array *dependencies
 			goto done;
 		}
 		for (u32 i = 0; i < parsed.count; ++i) {
-			dependencies->items[i] = arena_push_string_copy(arena, parsed.items[i]);
+			dependencies->items[i] = str_push_copy(arena, parsed.items[i]);
 			if (!dependencies->items[i].data) {
 				valid = false;
 				goto done;

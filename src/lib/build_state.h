@@ -1,14 +1,29 @@
 #ifndef BUILD_STATE_H
 #define BUILD_STATE_H
 
+// NOTE(RJ):
+//
+// The build state is meant to be the runtime database of all the tasks
+// we currently have.
+//
+// The build state is meant to be durable, the problem is that program can
+// quit unexpectedly.
+//
+// For this we use the build_state_stream, it's a layer on top of the build
+// state that journals each operation done on the build state.
+//
+
 #include "bob_build_internal.h"
 #include "platform.h"
 
 typedef struct Build_State_Task
 {
+	// TODO(RJ): we use a linear search, which should be fine for now!
 	Bob_Path        output;
+
 	u64             output_stamp;
 	Bob_Fingerprint fingerprint;
+
 	// Dependency storage is immutable and remains valid until the state arena is destroyed.
 	Bob_Path_Array  dependencies;
 }
@@ -16,8 +31,14 @@ Build_State_Task;
 
 typedef struct Build_State
 {
-	// NOTE(RJ): state access is thread safe
+	// TODO(RJ): this can be removed entirely! The problem is that we're doing something quite
+	// silly.
+	// When bob starts, we load the build state, then as each thread completes the main thread
+	// reads the events, and issues the appropriate stream commands. But we also update the
+	// build state we started with. We don't have to do that, we can create a copy of the build
+	// state and instead update that one!
 	Platform_Mutex       mutex;
+
 	// Backing storage must outlive the state.
 	Arena               *arena;
 

@@ -33,7 +33,7 @@ static b32 bob_path_platform_absolute(Arena *arena, String path, String *result)
 {
 	String terminated = path;
 	if (!string_is_terminated(terminated)) {
-		terminated = arena_push_string_copy(arena, path);
+		terminated = str_push_copy(arena, path);
 		if (!terminated.data) return false;
 	}
 	Platform_String_Result query = platform_get_absolute_path(terminated.data, NULL, 0);
@@ -820,6 +820,7 @@ Bob_Error bob_add_task(Bob_Build *build, Bob_Task_Desc desc, Bob_Node **node_out
 	}, node_out);
 }
 
+// TODO(RJ): remove this entirely, only tests use this thing for whatever reason!
 Bob_Error bob_set_task(Bob_Build *build, Bob_Node *node, Bob_Task_Desc task)
 {
 	Bob *bob = build ? build->graph : NULL;

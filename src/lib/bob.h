@@ -92,9 +92,12 @@ Bob_Exec_Params;
 
 Bob *bob_create(void);
 void bob_destroy(Bob *bob);
-/* Graph-lifetime storage. Available only before the graph is sealed. */
+
+// TODO(RJ): remove this entirely!
 void *bob_allocate(Bob *bob, u64 size, u64 alignment);
+// TODO(RJ): remove this entirely!
 String bob_copy_string(Bob *bob, String string);
+
 Bob_Error bob_add_node(Bob *bob, Bob_Node_Desc description, Bob_Node **node_out);
 Bob_Error bob_set_node(Bob *bob, Bob_Node *node, Bob_Node_Desc description);
 Bob_Error bob_set_node_action(Bob *bob, Bob_Node *node, Bob_Node_Function *function, void *user_data);
@@ -104,9 +107,11 @@ u32 bob_node_count(const Bob *bob);
 Bob_Node *bob_node_at(const Bob *bob, u32 index);
 const char *bob_node_name(const Bob_Node *node);
 Bob_Node_Function *bob_node_function(const Bob_Node *node);
-void *bob_node_user_data(const Bob_Node *node);
 u32 bob_dependency_count(const Bob_Node *node);
 Bob_Node *bob_dependency(const Bob_Node *node, u32 index);
+
+// TODO(RJ): build tasks use user_data why couldn't we allocate parallel arrays?
+void *bob_node_user_data(const Bob_Node *node);
 
 Bob_Error bob_execution_create(Bob *bob, Bob_Execution **execution_out);
 void bob_execution_destroy(Bob_Execution *execution);

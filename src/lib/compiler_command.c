@@ -86,7 +86,7 @@ b32 compiler_command_parse(Arena *arena, String command_line, Compiler_Command *
 		end_scratch(scratch);
 		return true;
 	}
-	result->executable = arena_push_string_copy(arena, executable);
+	result->executable = str_push_copy(arena, executable);
 	if (!result->executable.data) {
 		end_scratch(scratch);
 		return false;

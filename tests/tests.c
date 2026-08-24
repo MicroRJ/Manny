@@ -732,7 +732,7 @@ static b32 test_build_state_stress(void)
 			"G:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.44.35207\\include\\synthetic\\header_%04u.h",
 			i);
 		CHECK_STRESS(length > 0 && (size_t)length < sizeof(path));
-		dependencies.items[i] = arena_push_string_copy(&source_arena,
+		dependencies.items[i] = str_push_copy(&source_arena,
 			string_from_data(path, (u64)length));
 		CHECK_STRESS(dependencies.items[i].data != NULL);
 		dependency_paths.items[i] = test_path(bob, dependencies.items[i]);
@@ -905,7 +905,7 @@ static b32 test_arena_and_strings(void)
 	CHECK(string_equal(built, LIT("hello arena 42!")));
     CHECK(built.data[built.size] == 0);
 
-    copy = arena_push_string_copy(&arena, built);
+    copy = str_push_copy(&arena, built);
     CHECK(string_equal(copy, built));
     CHECK(copy.data[copy.size] == 0);
     CHECK(string_equal(string_slice(copy, 6, 5), LIT("arena")));
