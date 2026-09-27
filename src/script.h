@@ -1,7 +1,7 @@
 #ifndef SCRIPT_H
 #define SCRIPT_H
 
-#include "bob_build.h"
+#include "manny_build.h"
 #include "cmd_options.h"
 
 
@@ -16,7 +16,7 @@ Script_Options;
 
 typedef struct Script_Build
 {
-	Bob_Build *build;
+	Manny_Build *build;
 	Script_Options options;
 	char error[256];
 }

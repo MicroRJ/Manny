@@ -1,25 +1,25 @@
-#ifndef BOB_INTERNAL_H
-#define BOB_INTERNAL_H
+#ifndef MANNY_INTERNAL_H
+#define MANNY_INTERNAL_H
 
-#include "bob.h"
+#include "manny.h"
 
-typedef struct Bob_Node_Array
+typedef struct Manny_Node_Array
 {
-	Bob_Node **items;
+	Manny_Node **items;
 	u32        count;
 	u32        capacity;
 }
-Bob_Node_Array;
+Manny_Node_Array;
 
-struct Bob_Node
+struct Manny_Node
 {
 	// TODO(RJ): dynamic names are not needed here!
-	Bob_Node_Array     dependencies;
-	Bob_Node_Array     dependents;
+	Manny_Node_Array     dependencies;
+	Manny_Node_Array     dependents;
 
 	String             name;
 
-	Bob_Node_Function *function;
+	Manny_Node_Function *function;
 
 	// TODO(RJ): remove this!
 	u32                index;
@@ -28,10 +28,10 @@ struct Bob_Node
 };
 
 // NOTE(RJ): Note that this is just the graph builder!
-struct Bob
+struct Manny
 {
 	Arena      arena;
-	Bob_Node **nodes;
+	Manny_Node **nodes;
 	u32        node_count;
 	u32        node_capacity;
 	// TODO(RJ): this can be removed entirely once every node is truly immutable, because
@@ -44,6 +44,6 @@ struct Bob
 	u32        execution_count;
 };
 
-b32 bob_valid_node(const Bob *bob, const Bob_Node *node);
+b32 manny_valid_node(const Manny *manny, const Manny_Node *node);
 
 #endif

@@ -6,7 +6,7 @@
 #include <string.h>
 
 #define BUILD_RECORD_STREAM_VERSION            3
-#define BUILD_RECORD_STREAM_MAGIC              "BOBSTATE"
+#define BUILD_RECORD_STREAM_MAGIC              "MNYSTATE"
 #define BUILD_RECORD_STREAM_MAGIC_SIZE         8
 #define BUILD_RECORD_STREAM_HEADER_SIZE        16
 #define BUILD_RECORD_STREAM_RECORD_HEADER_SIZE 8
@@ -62,7 +62,7 @@ static b32 build_record_stream_reserve_paths(Arena *arena, Build_Record_Stream *
 		if (capacity > UINT32_MAX / 2) return false;
 		capacity *= 2;
 	}
-	Bob_Path *paths = arena_push_zero_aligned(arena, (u64)capacity * sizeof(*paths), _Alignof(Bob_Path));
+	Manny_Path *paths = arena_push_zero_aligned(arena, (u64)capacity * sizeof(*paths), _Alignof(Manny_Path));
 	if (!paths) return false;
 	if (stream->path_count) memcpy(paths, stream->paths, (u64)stream->path_count * sizeof(*stream->paths));
 	stream->paths = paths;
@@ -86,24 +86,24 @@ static b32 build_record_stream_reserve_atoms(Arena *arena, Build_Record_Stream *
 	return true;
 }
 
-static Build_Record_Path_Id build_record_stream_path_id(const Build_Record_Stream *stream, Bob_Path path)
+static Build_Record_Path_Id build_record_stream_path_id(const Build_Record_Stream *stream, Manny_Path path)
 {
 	u32 atom = path.atom.id;
-	if (!stream || !bob_path_is_valid(path) || atom >= stream->atom_capacity) return BUILD_RECORD_PATH_ID_NONE;
+	if (!stream || !manny_path_is_valid(path) || atom >= stream->atom_capacity) return BUILD_RECORD_PATH_ID_NONE;
 	return stream->ids_by_atom[atom];
 }
 
-static Bob_Path build_record_stream_path(const Build_Record_Stream *stream, Build_Record_Path_Id id)
+static Manny_Path build_record_stream_path(const Build_Record_Stream *stream, Build_Record_Path_Id id)
 {
-	if (!stream || id == BUILD_RECORD_PATH_ID_NONE || id > stream->path_count) return (Bob_Path){0};
+	if (!stream || id == BUILD_RECORD_PATH_ID_NONE || id > stream->path_count) return (Manny_Path){0};
 	return stream->paths[id - 1];
 }
 
-static Build_Record_Path_Id build_record_stream_add_path(Arena *arena, Build_Record_Stream *stream, Bob_Path path)
+static Build_Record_Path_Id build_record_stream_add_path(Arena *arena, Build_Record_Stream *stream, Manny_Path path)
 {
 	Build_Record_Path_Id existing = build_record_stream_path_id(stream, path);
 	if (existing != BUILD_RECORD_PATH_ID_NONE) return existing;
-	if (!arena || !stream || !bob_path_is_valid(path) || stream->path_count == UINT32_MAX) return BUILD_RECORD_PATH_ID_NONE;
+	if (!arena || !stream || !manny_path_is_valid(path) || stream->path_count == UINT32_MAX) return BUILD_RECORD_PATH_ID_NONE;
 	if (!build_record_stream_reserve_paths(arena, stream, stream->path_count + 1)) return BUILD_RECORD_PATH_ID_NONE;
 	if (!build_record_stream_reserve_atoms(arena, stream, path.atom.id)) return BUILD_RECORD_PATH_ID_NONE;
 	Build_Record_Path_Id id = ++stream->path_count;
@@ -112,9 +112,9 @@ static Build_Record_Path_Id build_record_stream_add_path(Arena *arena, Build_Rec
 	return id;
 }
 
-static b32 build_record_stream_add_replayed_path(Arena *arena, Build_Record_Stream *stream, Bob_Path path)
+static b32 build_record_stream_add_replayed_path(Arena *arena, Build_Record_Stream *stream, Manny_Path path)
 {
-	if (!arena || !stream || !bob_path_is_valid(path) || stream->path_count == UINT32_MAX) return false;
+	if (!arena || !stream || !manny_path_is_valid(path) || stream->path_count == UINT32_MAX) return false;
 	if (!build_record_stream_reserve_paths(arena, stream, stream->path_count + 1)) return false;
 	if (!build_record_stream_reserve_atoms(arena, stream, path.atom.id)) return false;
 	Build_Record_Path_Id id = ++stream->path_count;
@@ -216,11 +216,11 @@ static b32 build_record_stream_size(const Build_Record_Stream *stream, const Bui
 	if (stream->task_count && !stream->tasks) return false;
 
 	for (u32 i = 0; i < path_index->path_count; ++i) {
-		Bob_Path handle = path_index->paths[i];
-		String path = bob_path_string(stream->build, handle);
+		Manny_Path handle = path_index->paths[i];
+		String path = manny_path_string(stream->build, handle);
 		u64 content_size = 8;
 		if (!path.data || path.size == 0 || path.size > UINT32_MAX) return false;
-		if (!bob_path_is_valid(handle)) return false;
+		if (!manny_path_is_valid(handle)) return false;
 		if (!build_record_size_add(&content_size, 1, path.size)) return false;
 		if (content_size > UINT32_MAX) return false;
 		if (!build_record_size_add(&size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE)) return false;
@@ -229,7 +229,7 @@ static b32 build_record_stream_size(const Build_Record_Stream *stream, const Bui
 
 	for (u32 i = 0; i < stream->task_count; ++i) {
 		const Build_Record_Task *task = stream->tasks + i;
-		u64 content_size = 20 + BOB_FINGERPRINT_SIZE;
+		u64 content_size = 20 + MANNY_FINGERPRINT_SIZE;
 		if (build_record_stream_path_id(path_index, task->output) == BUILD_RECORD_PATH_ID_NONE) return false;
 		if (build_record_task_index(stream, task->output) != i) return false;
 		if (task->dependencies.count && !task->dependencies.items) return false;
@@ -281,7 +281,7 @@ static b32 build_record_stream_encode_intern(Build_Record_Encoder *encoder, Stri
 
 static b32 build_record_stream_encode_set(Build_Record_Encoder *encoder, const Build_Record_Stream *state_stream, const Build_Record_Task *task)
 {
-	u64 content_size = 20 + BOB_FINGERPRINT_SIZE;
+	u64 content_size = 20 + MANNY_FINGERPRINT_SIZE;
 	u64 checksum_offset;
 	Build_Record_Encoder content;
 	if (!encoder || !state_stream || !task || (task->dependencies.count && !task->dependencies.items)) return false;
@@ -328,7 +328,7 @@ static b32 build_record_stream_encode_with_paths(Arena *arena, const Build_Recor
 	if (!build_record_encode_u32(&encoder, BUILD_RECORD_STREAM_HEADER_SIZE)) goto failure;
 
 	for (u32 i = 0; i < path_index->path_count; ++i) {
-		if (!build_record_stream_encode_intern(&encoder, bob_path_string(stream->build, path_index->paths[i]))) goto failure;
+		if (!build_record_stream_encode_intern(&encoder, manny_path_string(stream->build, path_index->paths[i]))) goto failure;
 	}
 
 	for (u32 i = 0; i < stream->task_count; ++i) {
@@ -354,7 +354,7 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 	};
 	Build_Record_Decoder decoder = { (const u8 *)encoded.data, encoded.size, 0 };
 	Arena *arena = stream ? stream->arena : NULL;
-	Bob_Build *build = stream ? stream->build : NULL;
+	Manny_Build *build = stream ? stream->build : NULL;
 	const u8 *magic;
 	u32 version;
 	u32 header_size;
@@ -394,11 +394,11 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 			{
 				u32       path_size;
 				const u8 *path_data;
-				Bob_Path  path;
+				Manny_Path  path;
 				if (!build_record_decode_u32(&content, &path_size)) goto invalid;
 				if (path_size == 0 || path_size != content.size - content.cursor) goto invalid;
 				if (!build_record_decode_bytes(&content, &path_data, path_size)) goto invalid;
-				if (!bob_path_resolve(build, bob_build_root(build), string_from_data((void *)path_data, path_size), &path)) goto error;
+				if (!manny_path_resolve(build, manny_build_root(build), string_from_data((void *)path_data, path_size), &path)) goto error;
 				if (build_record_stream_path_id(&decoded, path) != BUILD_RECORD_PATH_ID_NONE) goto invalid;
 				if (!build_record_stream_add_replayed_path(arena, &decoded, path)) goto error;
 
@@ -413,12 +413,12 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 
 				if (!build_record_decode_u32(&content, &output)) goto invalid;
 				if (!build_record_decode_u64(&content, &output_stamp)) goto invalid;
-				if (!build_record_decode_bytes(&content, &fingerprint, BOB_FINGERPRINT_SIZE)) goto invalid;
+				if (!build_record_decode_bytes(&content, &fingerprint, MANNY_FINGERPRINT_SIZE)) goto invalid;
 				if (!build_record_decode_u32(&content, &dependency_count)) goto invalid;
 
 				if ((u64)dependency_count * 4 != content.size - content.cursor) goto invalid;
 				if (output == BUILD_RECORD_PATH_ID_NONE || output > decoded.path_count) goto invalid;
-				Bob_Path output_path = build_record_stream_path(&decoded, output);
+				Manny_Path output_path = build_record_stream_path(&decoded, output);
 
 				u32 existing = build_record_task_index(&decoded, output_path);
 				if (existing == UINT32_MAX && decoded.task_count == UINT32_MAX) goto error;
@@ -430,7 +430,7 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 				memcpy(task.fingerprint.bytes, fingerprint, sizeof(task.fingerprint.bytes));
 
 				if (dependency_count) {
-					task.dependencies.items = arena_push_zero_aligned(arena, (u64)dependency_count * sizeof(*task.dependencies.items), _Alignof(Bob_Path));
+					task.dependencies.items = arena_push_zero_aligned(arena, (u64)dependency_count * sizeof(*task.dependencies.items), _Alignof(Manny_Path));
 					if (!task.dependencies.items) goto error;
 				}
 				for (u32 dependency = 0; dependency < dependency_count; ++dependency) {
@@ -519,7 +519,7 @@ b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Bui
 	Scratch scratch = {0};
 	Build_Record_Encoder encoder = {0};
 	if (!build_record_stream_is_valid(stream) || !string_is_terminated(path) || path.size == 0) return false;
-	if (!bob_path_is_valid(task.output) || (task.dependencies.count && !task.dependencies.items)) return false;
+	if (!manny_path_is_valid(task.output) || (task.dependencies.count && !task.dependencies.items)) return false;
 	previous = *stream;
 	first_new_path = stream->path_count;
 	mark = arena_mark(stream->arena);
@@ -528,11 +528,11 @@ b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Bui
 		if (build_record_stream_add_path(stream->arena, stream, task.dependencies.items[i]) == BUILD_RECORD_PATH_ID_NONE) goto rollback;
 	}
 	for (u32 i = first_new_path; i < stream->path_count; ++i) {
-		String new_path = bob_path_string(stream->build, stream->paths[i]);
+		String new_path = manny_path_string(stream->build, stream->paths[i]);
 		if (!build_record_size_add(&append_size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 8)) goto rollback;
 		if (!build_record_size_add(&append_size, 1, new_path.size)) goto rollback;
 	}
-	if (!build_record_size_add(&append_size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 20 + BOB_FINGERPRINT_SIZE)) goto rollback;
+	if (!build_record_size_add(&append_size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 20 + MANNY_FINGERPRINT_SIZE)) goto rollback;
 	if (!build_record_size_add(&append_size, task.dependencies.count, 4) || append_size > SIZE_MAX) goto rollback;
 
 	scratch = begin_different_scratch(stream->arena);
@@ -540,7 +540,7 @@ b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Bui
 	encoder.size = append_size;
 	if (!encoder.data) goto failure;
 	for (u32 i = first_new_path; i < stream->path_count; ++i) {
-		if (!build_record_stream_encode_intern(&encoder, bob_path_string(stream->build, stream->paths[i]))) goto failure;
+		if (!build_record_stream_encode_intern(&encoder, manny_path_string(stream->build, stream->paths[i]))) goto failure;
 	}
 	if (!build_record_stream_encode_set(&encoder, stream, &task)) goto failure;
 	if (encoder.cursor != encoder.size || !build_record_stream_append_bytes(path, encoder.data, encoder.size)) goto failure;
@@ -554,7 +554,7 @@ b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Bui
 	return false;
 }
 
-b32 build_record_stream_append_remove(Build_Record_Stream *stream, String path, Bob_Path output)
+b32 build_record_stream_append_remove(Build_Record_Stream *stream, String path, Manny_Path output)
 {
 	u8 bytes[BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 8];
 	Build_Record_Encoder encoder = { bytes, sizeof(bytes), 0 };
@@ -627,7 +627,7 @@ b32 build_record_stream_compact(Build_Record_Stream *stream, String path)
 		arena_finalize_string(&arena, temporary);
 	}
 	if (!build_record_stream_encode_with_paths(&arena, stream, &compacted, &encoded)) goto done;
-	if (!bob_platform_write_entire_file(temporary, encoded.data, (size_t)encoded.size)) goto done;
+	if (!manny_platform_write_entire_file(temporary, encoded.data, (size_t)encoded.size)) goto done;
 	if (!platform_move_file(temporary.data, path.data, true)) goto done;
 	result = true;
 
@@ -645,8 +645,8 @@ Build_Record_Result build_record_stream_load(Build_Record_Stream *stream, String
 	build_record_replace_tasks(stream, &(Build_Record_Stream){0});
 	build_record_stream_replace_paths(stream, &(Build_Record_Stream){0});
 
-	Bob_Platform_File_Info info;
-	if (!bob_platform_file_info(path, &info)) return BUILD_RECORD_MISSING;
+	Manny_Platform_File_Info info;
+	if (!manny_platform_file_info(path, &info)) return BUILD_RECORD_MISSING;
 	if (info.size == UINT64_MAX) return BUILD_RECORD_ERROR;
 
 	// NOTE(RJ): switched to using scratch arena instead!
@@ -655,7 +655,7 @@ Build_Record_Result build_record_stream_load(Build_Record_Stream *stream, String
 	if (!scratch.arena->data) return BUILD_RECORD_ERROR;
 
 	String source;
-	if (!bob_platform_read_entire_file(scratch.arena, path, &source)) {
+	if (!manny_platform_read_entire_file(scratch.arena, path, &source)) {
 		end_scratch(scratch);
 		return BUILD_RECORD_ERROR;
 	}

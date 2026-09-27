@@ -1,15 +1,15 @@
 #include "test.h"
 
-static Bob_Path test_path(Bob_Build *build, String source)
+static Manny_Path test_path(Manny_Build *build, String source)
 {
-	Bob_Path result = {0};
-	if (build) bob_path_resolve(build, bob_build_root(build), source, &result);
+	Manny_Path result = {0};
+	if (build) manny_path_resolve(build, manny_build_root(build), source, &result);
 	return result;
 }
 
-static Bob_Fingerprint test_fingerprint(String value)
+static Manny_Fingerprint test_fingerprint(String value)
 {
-	Bob_Fingerprint result;
+	Manny_Fingerprint result;
 	blake3_hasher hasher;
 	blake3_hasher_init(&hasher);
 	blake3_hasher_update(&hasher, value.data, (size_t)value.size);
@@ -17,33 +17,33 @@ static Bob_Fingerprint test_fingerprint(String value)
 	return result;
 }
 
-static b32 fingerprints_equal(Bob_Fingerprint left, Bob_Fingerprint right)
+static b32 fingerprints_equal(Manny_Fingerprint left, Manny_Fingerprint right)
 {
-	return memcmp(left.bytes, right.bytes, BOB_FINGERPRINT_SIZE) == 0;
+	return memcmp(left.bytes, right.bytes, MANNY_FINGERPRINT_SIZE) == 0;
 }
 
-static b32 record_task_contains(Bob_Build *build, const Build_Record_Task *task, String path)
+static b32 record_task_contains(Manny_Build *build, const Build_Record_Task *task, String path)
 {
-	Bob_Path expected = test_path(build, path);
-	if (!task || !bob_path_is_valid(expected)) return false;
+	Manny_Path expected = test_path(build, path);
+	if (!task || !manny_path_is_valid(expected)) return false;
 	for (u32 i = 0; i < task->dependencies.count; ++i) {
 		if (task->dependencies.items[i].atom.id == expected.atom.id) return true;
 	}
 	return false;
 }
 
-static b32 append_task(Arena *arena, Bob_Build *build, Build_Record_Stream *stream, String file,
+static b32 append_task(Arena *arena, Manny_Build *build, Build_Record_Stream *stream, String file,
 	String output, String_Array dependencies, u64 output_stamp, String fingerprint)
 {
-	Bob_Path_Array paths = {0};
+	Manny_Path_Array paths = {0};
 	if (dependencies.count) {
 		paths.items = arena_push_zero_aligned(arena,
-			(u64)dependencies.count * sizeof(*paths.items), _Alignof(Bob_Path));
+			(u64)dependencies.count * sizeof(*paths.items), _Alignof(Manny_Path));
 		if (!paths.items) return false;
 	}
 	for (u32 i = 0; i < dependencies.count; ++i) {
 		paths.items[paths.count] = test_path(build, dependencies.items[i]);
-		if (!bob_path_is_valid(paths.items[paths.count])) return false;
+		if (!manny_path_is_valid(paths.items[paths.count])) return false;
 		++paths.count;
 	}
 	return build_record_stream_append_set(stream, file, (Build_Record_Task){
@@ -54,7 +54,7 @@ static b32 append_task(Arena *arena, Bob_Build *build, Build_Record_Stream *stre
 	});
 }
 
-static b32 snapshot_get(Bob_Build *build, const Build_Record_Stream *stream, Arena *arena,
+static b32 snapshot_get(Manny_Build *build, const Build_Record_Stream *stream, Arena *arena,
 	String output, Build_Record_Task *task, u32 *task_count)
 {
 	Build_Record_Snapshot snapshot;
@@ -65,7 +65,7 @@ static b32 snapshot_get(Bob_Build *build, const Build_Record_Stream *stream, Are
 
 static b32 test_record_round_trip(void)
 {
-	Bob_Build *build = bob_build_create();
+	Manny_Build *build = manny_build_create();
 	Arena arena = arena_create(KILOBYTES(64));
 	Arena loaded_arena = arena_create(KILOBYTES(64));
 	Arena snapshot_arena = arena_create(KILOBYTES(16));
@@ -102,14 +102,14 @@ static b32 test_record_round_trip(void)
 	arena_destroy(&snapshot_arena);
 	arena_destroy(&loaded_arena);
 	arena_destroy(&arena);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return true;
 }
 
 static b32 test_record_recovery(void)
 {
-	static const char malformed[] = "not a Bob state";
-	Bob_Build *build = bob_build_create();
+	static const char malformed[] = "not a Manny state";
+	Manny_Build *build = manny_build_create();
 	Arena arena = arena_create(KILOBYTES(64));
 	Arena loaded_arena = arena_create(KILOBYTES(64));
 	Arena io_arena = arena_create(KILOBYTES(64));
@@ -133,29 +133,29 @@ static b32 test_record_recovery(void)
 	CHECK(append_task(&arena, build, &stream, file, LIT("build/second.obj"), (String_Array){0}, 2, LIT("second")));
 	CHECK(build_record_stream_compact(&stream, file));
 
-	CHECK(bob_platform_read_entire_file(&io_arena, file, &bytes));
+	CHECK(manny_platform_read_entire_file(&io_arena, file, &bytes));
 	CHECK(bytes.size > 16);
-	CHECK(bob_platform_write_entire_file(file, bytes.data, bytes.size - 1));
+	CHECK(manny_platform_write_entire_file(file, bytes.data, bytes.size - 1));
 	CHECK(build_record_stream_load(&loaded, file) == BUILD_RECORD_RECOVERED);
 	CHECK(snapshot_get(build, &loaded, &snapshot_arena, LIT("build/first.obj"), &task, &task_count));
 	CHECK(task_count == 1);
 
 	CHECK(build_record_stream_compact(&stream, file));
 	arena_reset(&io_arena);
-	CHECK(bob_platform_read_entire_file(&io_arena, file, &bytes));
+	CHECK(manny_platform_read_entire_file(&io_arena, file, &bytes));
 	bytes.data[bytes.size - 1] ^= 0x5a;
-	CHECK(bob_platform_write_entire_file(file, bytes.data, bytes.size));
+	CHECK(manny_platform_write_entire_file(file, bytes.data, bytes.size));
 	CHECK(build_record_stream_load(&loaded, file) == BUILD_RECORD_INVALID);
 
 	CHECK(build_record_stream_compact(&stream, file));
 	arena_reset(&io_arena);
-	CHECK(bob_platform_read_entire_file(&io_arena, file, &bytes));
+	CHECK(manny_platform_read_entire_file(&io_arena, file, &bytes));
 	CHECK(bytes.size > 12);
 	bytes.data[8] ^= 0x01;
-	CHECK(bob_platform_write_entire_file(file, bytes.data, bytes.size));
+	CHECK(manny_platform_write_entire_file(file, bytes.data, bytes.size));
 	CHECK(build_record_stream_load(&loaded, file) == BUILD_RECORD_INVALID);
 
-	CHECK(bob_platform_write_entire_file(file, malformed, sizeof(malformed) - 1));
+	CHECK(manny_platform_write_entire_file(file, malformed, sizeof(malformed) - 1));
 	CHECK(build_record_stream_load(&loaded, file) == BUILD_RECORD_INVALID);
 	CHECK(platform_remove_tree(root.data));
 	build_record_stream_destroy(&loaded);
@@ -164,13 +164,13 @@ static b32 test_record_recovery(void)
 	arena_destroy(&io_arena);
 	arena_destroy(&loaded_arena);
 	arena_destroy(&arena);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return true;
 }
 
 static b32 test_record_append_and_remove(void)
 {
-	Bob_Build *build = bob_build_create();
+	Manny_Build *build = manny_build_create();
 	Arena arena = arena_create(KILOBYTES(64));
 	Arena loaded_arena = arena_create(KILOBYTES(64));
 	Arena snapshot_arena = arena_create(KILOBYTES(16));
@@ -209,13 +209,13 @@ static b32 test_record_append_and_remove(void)
 	arena_destroy(&snapshot_arena);
 	arena_destroy(&loaded_arena);
 	arena_destroy(&arena);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return true;
 }
 
 static b32 test_record_snapshot_is_immutable(void)
 {
-	Bob_Build *build = bob_build_create();
+	Manny_Build *build = manny_build_create();
 	Arena arena = arena_create(KILOBYTES(64));
 	Arena snapshot_arena = arena_create(KILOBYTES(16));
 	Build_Record_Stream stream = {0};
@@ -246,17 +246,17 @@ static b32 test_record_snapshot_is_immutable(void)
 	build_record_stream_destroy(&stream);
 	arena_destroy(&snapshot_arena);
 	arena_destroy(&arena);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return true;
 }
 
 int main(void)
 {
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_record_round_trip),
-		BOB_TEST(test_record_recovery),
-		BOB_TEST(test_record_append_and_remove),
-		BOB_TEST(test_record_snapshot_is_immutable),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_record_round_trip),
+		MANNY_TEST(test_record_recovery),
+		MANNY_TEST(test_record_append_and_remove),
+		MANNY_TEST(test_record_snapshot_is_immutable),
 	};
 	return test_run_suite("record", tests, ARRAY_COUNT(tests));
 }

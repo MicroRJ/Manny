@@ -38,14 +38,14 @@ options := {
 entries := {}
 
 entries.build = fun() {
-	ret bob.build({
+	ret manny.build({
 		targets = { link },
 		options = options,
 	})
 }
 
 entries.run = fun() {
-	ret bob.build({
+	ret manny.build({
 		targets = { run },
 		options = options,
 	})

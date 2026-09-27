@@ -4,7 +4,7 @@
 
 - Task output content caching
 
-- Migrate the MSVC vars cache out of bob core, that can be done with a simple elf script
+- Migrate the MSVC vars cache out of manny core, that can be done with a simple elf script
 
 - Figure out the platform layer situation.
 

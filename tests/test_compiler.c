@@ -104,15 +104,15 @@ static b32 write_test_text_at_time(const char *path, const char *text, u64 time)
     return succeeded;
 }
 
-static b32 run_single_task(const Bob_Task_Desc *task, const char *name)
+static b32 run_single_task(const Manny_Task_Desc *task, const char *name)
 {
-	Bob_Build *build = bob_build_create();
-	Bob *graph = bob_build_graph(build);
+	Manny_Build *build = manny_build_create();
+	Manny *graph = manny_build_graph(build);
 	b32 result;
 	if (!graph) return false;
 	test_add_node(graph, name);
 	result = test_run_tasks(build, task, 1, 1);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return result;
 }
 
@@ -123,14 +123,14 @@ static b32 test_compiler_dependency_state(void)
 	String original_directory = {0};
 	String inputs[] = { LIT("source.c") };
 	String outputs[] = { LIT("object.obj") };
-	Bob_Task_Desc task = {
+	Manny_Task_Desc task = {
 		.command_line = LIT("clang-cl /nologo /c source.c /Foobject.obj"),
 		.working_directory = LIT("work"),
 		.inputs = STRING_ARRAY_FROM(inputs),
 		.outputs = STRING_ARRAY_FROM(outputs),
 	};
-	Bob_Platform_File_Info before;
-	Bob_Platform_File_Info after;
+	Manny_Platform_File_Info before;
+	Manny_Platform_File_Info after;
 	b32 changed_directory = false;
 	b32 result = false;
 
@@ -143,7 +143,7 @@ static b32 test_compiler_dependency_state(void)
 	} while (0)
 
 	CHECK_DEPENDENCY_STATE(arena.data);
-	CHECK_DEPENDENCY_STATE(bob_platform_current_directory(&arena, &original_directory));
+	CHECK_DEPENDENCY_STATE(manny_platform_current_directory(&arena, &original_directory));
 	CHECK_DEPENDENCY_STATE(platform_remove_tree("build\\compiler_dependency_state"));
 	CHECK_DEPENDENCY_STATE(platform_create_directories("build\\compiler_dependency_state"));
 	CHECK_DEPENDENCY_STATE(platform_set_current_directory("build\\compiler_dependency_state"));
@@ -153,48 +153,48 @@ static b32 test_compiler_dependency_state(void)
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\source.c",
 		"#include \"header.h\"\nint dependency_value = VALUE;\n", 100ULL));
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "capture compiler dependencies"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &before));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &before));
 
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "reuse compiler dependencies"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &after));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &after));
 	CHECK_DEPENDENCY_STATE(after.modified_unix_ms == before.modified_unix_ms);
 
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\header.h", "#define VALUE 2\n",
 		(u64)after.modified_unix_ms + 1000));
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "rebuild changed compiler dependency"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &before));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &before));
 	CHECK_DEPENDENCY_STATE(before.modified_unix_ms != after.modified_unix_ms);
 
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\header.h", "#define VALUE 3\n", 100ULL));
-	CHECK_DEPENDENCY_STATE(platform_remove_file(".bob\\state"));
+	CHECK_DEPENDENCY_STATE(platform_remove_file(".manny\\state"));
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "rebuild missing compiler state"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &after));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &after));
 	CHECK_DEPENDENCY_STATE(after.modified_unix_ms != before.modified_unix_ms);
 
-	CHECK_DEPENDENCY_STATE(bob_platform_write_entire_file(LIT(".bob/state"),
+	CHECK_DEPENDENCY_STATE(manny_platform_write_entire_file(LIT(".manny/state"),
 		malformed, sizeof(malformed) - 1));
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "rebuild malformed compiler state"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &before));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &before));
 	CHECK_DEPENDENCY_STATE(before.modified_unix_ms != after.modified_unix_ms);
 
 	CHECK_DEPENDENCY_STATE(platform_remove_file("work\\header.h"));
 	CHECK_DEPENDENCY_STATE(!run_single_task(&task, "rebuild missing compiler dependency"));
-	CHECK_DEPENDENCY_STATE(!bob_platform_file_info(
+	CHECK_DEPENDENCY_STATE(!manny_platform_file_info(
 		LIT("work/object.obj.d.tmp"), &after));
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\header.h", "#define VALUE 4\n", 100ULL));
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "rebuild after failed compiler dependency"));
-	CHECK_DEPENDENCY_STATE(bob_platform_file_info(LIT("work/object.obj"), &after));
+	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &after));
 	CHECK_DEPENDENCY_STATE(after.modified_unix_ms != before.modified_unix_ms);
 	result = true;
 
 cleanup:
 	if (changed_directory) {
-		platform_remove_tree(".bob");
+		platform_remove_tree(".manny");
 		platform_remove_tree("work");
 		if (!platform_set_current_directory(original_directory.data)) result = false;
 		else platform_remove_tree("build\\compiler_dependency_state");
@@ -273,11 +273,11 @@ static b32 test_compiler_command(void)
 
 int main(void)
 {
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_option_resolution),
-		BOB_TEST(test_compiler_command),
-		BOB_TEST(test_make_depfile),
-		BOB_TEST(test_compiler_dependency_state),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_option_resolution),
+		MANNY_TEST(test_compiler_command),
+		MANNY_TEST(test_make_depfile),
+		MANNY_TEST(test_compiler_dependency_state),
 	};
 	return test_run_suite("compiler", tests, ARRAY_COUNT(tests));
 }

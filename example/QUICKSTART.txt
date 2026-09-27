@@ -1,4 +1,4 @@
-Bob quick start
+Manny quick start
 
 Requirements
 
@@ -8,19 +8,19 @@ Requirements
 
 From this directory, run:
 
-    ..\bob.exe
+    ..\manny.exe
 
-Bob compiles and links the example in parallel where possible. Run it with:
+Manny compiles and links the example in parallel where possible. Run it with:
 
-    ..\bob.exe run
+    ..\manny.exe run
 
 Run the build again to see the no-op case:
 
-    ..\bob.exe
+    ..\manny.exe
 
-Then edit message.h or message.c and ask Bob to explain the next build:
+Then edit message.h or message.c and ask Manny to explain the next build:
 
-    ..\bob.exe --explain
+    ..\manny.exe --explain
 
-The build description is build.elf. Bob's persistent incremental state lives
-in .bob/state, and generated files live in build/.
+The build description is build.elf. Manny's persistent incremental state lives
+in .manny/state, and generated files live in build/.

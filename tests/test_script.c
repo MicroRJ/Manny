@@ -34,30 +34,30 @@ static b32 test_elf_descriptor(void)
         "}\n";
     String path = LIT("build/test_elf_descriptor.elf");
     Script_Build build;
-    Bob *graph;
+    Manny *graph;
 
     CHECK(platform_create_directories("build"));
-    CHECK(bob_platform_write_entire_file(path, source, sizeof(source) - 1));
+    CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     if (!script_load_build(path, &build)) {
         platform_remove_file(path.data);
         printf("  elf error: %s\n", build.error);
         return false;
     }
     CHECK(platform_remove_file(path.data));
-    graph = bob_build_graph(build.build);
-	CHECK(string_ends_with(bob_path_string(build.build, bob_build_root(build.build)), LIT("/build")));
-    CHECK(bob_task_count(build.build) == 4);
-    CHECK(string_equal(string_from_cstring(bob_task_name(bob_node_at(graph, 0))), LIT("run hello.exe")));
-    CHECK(bob_dependency_count(bob_node_at(graph, 0)) == 1);
-    CHECK(bob_dependency(bob_node_at(graph, 0), 0) == bob_node_at(graph, 1));
-    CHECK(string_equal(string_from_cstring(bob_task_name(bob_node_at(graph, 2))), LIT("compile main")));
+    graph = manny_build_graph(build.build);
+	CHECK(string_ends_with(manny_path_string(build.build, manny_build_root(build.build)), LIT("/build")));
+    CHECK(manny_task_count(build.build) == 4);
+    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 0))), LIT("run hello.exe")));
+    CHECK(manny_dependency_count(manny_node_at(graph, 0)) == 1);
+    CHECK(manny_dependency(manny_node_at(graph, 0), 0) == manny_node_at(graph, 1));
+    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 2))), LIT("compile main")));
     CHECK(build.options.has_worker_count);
     CHECK(build.options.worker_count == 2);
     CHECK(build.options.has_verbosity);
     CHECK(build.options.verbosity == 0);
-    CHECK(bob_dependency_count(bob_node_at(graph, 1)) == 2);
-    CHECK(bob_dependency(bob_node_at(graph, 1), 0) == bob_node_at(graph, 2));
-    bob_build_destroy(build.build);
+    CHECK(manny_dependency_count(manny_node_at(graph, 1)) == 2);
+    CHECK(manny_dependency(manny_node_at(graph, 1), 0) == manny_node_at(graph, 2));
+    manny_build_destroy(build.build);
     return true;
 }
 
@@ -78,28 +78,28 @@ static b32 test_elf_generated_descriptor(void)
         "ret {targets = {tasks[7]}}\n";
     String path = LIT("build/test_elf_generated_descriptor.elf");
     Script_Build build;
-    Bob *graph;
+    Manny *graph;
 
     CHECK(platform_create_directories("build"));
-    CHECK(bob_platform_write_entire_file(path, source, sizeof(source) - 1));
+    CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     if (!script_load_build(path, &build)) {
         platform_remove_file(path.data);
         printf("  elf error: %s\n", build.error);
         return false;
     }
     CHECK(platform_remove_file(path.data));
-    graph = bob_build_graph(build.build);
-    CHECK(bob_task_count(build.build) == 8);
-    CHECK(string_equal(string_from_cstring(bob_task_name(bob_node_at(graph, 0))), LIT("generated 7")));
-    CHECK(bob_dependency_count(bob_node_at(graph, 0)) == 1);
-    CHECK(bob_dependency(bob_node_at(graph, 0), 0) == bob_node_at(graph, 1));
-    CHECK(string_equal(string_from_cstring(bob_task_name(bob_node_at(graph, 7))), LIT("generated 0")));
-    CHECK(bob_dependency_count(bob_node_at(graph, 7)) == 0);
-    bob_build_destroy(build.build);
+    graph = manny_build_graph(build.build);
+    CHECK(manny_task_count(build.build) == 8);
+    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 0))), LIT("generated 7")));
+    CHECK(manny_dependency_count(manny_node_at(graph, 0)) == 1);
+    CHECK(manny_dependency(manny_node_at(graph, 0), 0) == manny_node_at(graph, 1));
+    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 7))), LIT("generated 0")));
+    CHECK(manny_dependency_count(manny_node_at(graph, 7)) == 0);
+    manny_build_destroy(build.build);
     return true;
 }
 
-static b32 test_bob_script(void)
+static b32 test_manny_script(void)
 {
     Arena arena = arena_create(MEGABYTES(16));
     Script *script = script_load(&arena, LIT("build.elf"));
@@ -112,8 +112,8 @@ static b32 test_bob_script(void)
     return true;
 }
 
-// NOTE(RJ) we must be able to pet bob
-static b32 test_pet_bob(void)
+// NOTE(RJ) we must be able to pet manny
+static b32 test_pet_manny(void)
 {
 	Arena arena = arena_create(MEGABYTES(16));
 	Script *script = script_load(&arena, LIT("build.elf"));
@@ -129,7 +129,7 @@ static b32 test_script_functions(void)
 {
     static const char source[] =
         "build := fun() {\n"
-        "    ret bob.build({\n"
+        "    ret manny.build({\n"
         "        targets = {},\n"
         "        options = {workers = 1, verbosity = 0},\n"
         "    })\n"
@@ -139,7 +139,7 @@ static b32 test_script_functions(void)
     String path = LIT("build/test_script_functions.elf");
     Arena arena = arena_create(MEGABYTES(16));
     CHECK(platform_create_directories("build"));
-    CHECK(bob_platform_write_entire_file(path, source, sizeof(source) - 1));
+    CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     Script *script = script_load(&arena, path);
     CHECK(platform_remove_file(path.data));
     CHECK(script_is_loaded(script));
@@ -159,12 +159,12 @@ static b32 test_script_functions(void)
 
 int main(void)
 {
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_elf_descriptor),
-		BOB_TEST(test_elf_generated_descriptor),
-		BOB_TEST(test_bob_script),
-		BOB_TEST(test_pet_bob),
-		BOB_TEST(test_script_functions),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_elf_descriptor),
+		MANNY_TEST(test_elf_generated_descriptor),
+		MANNY_TEST(test_manny_script),
+		MANNY_TEST(test_pet_manny),
+		MANNY_TEST(test_script_functions),
 	};
 	return test_run_suite("script", tests, ARRAY_COUNT(tests));
 }

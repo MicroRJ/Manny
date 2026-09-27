@@ -9,31 +9,31 @@ if ($Configuration -notmatch '^[A-Za-z0-9._-]+$') {
 }
 
 $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
-$bobExecutable = Join-Path $repositoryRoot "blessed\bob.exe"
+$mannyExecutable = Join-Path $repositoryRoot "blessed\manny.exe"
 $licenseFile = Join-Path $repositoryRoot "LICENSE"
 $exampleRoot = Join-Path $repositoryRoot "example"
 $distributionRoot = Join-Path $repositoryRoot "dist"
 
-if (-not (Test-Path -LiteralPath $bobExecutable -PathType Leaf)) {
-	throw "Missing blessed\bob.exe. Build and bless Bob before packaging it."
+if (-not (Test-Path -LiteralPath $mannyExecutable -PathType Leaf)) {
+	throw "Missing blessed\manny.exe. Build and bless Manny before packaging it."
 }
 
-$versionOutput = @(& $bobExecutable --version)
+$versionOutput = @(& $mannyExecutable --version)
 if ($LASTEXITCODE -ne 0) {
-	throw "Could not read the Bob version from blessed\bob.exe."
+	throw "Could not read the Manny version from blessed\manny.exe."
 }
 
-$versionLine = $versionOutput | Where-Object { $_ -like "bob *" } | Select-Object -First 1
+$versionLine = $versionOutput | Where-Object { $_ -like "manny *" } | Select-Object -First 1
 if (-not $versionLine) {
-	throw "blessed\bob.exe did not report a Bob version."
+	throw "blessed\manny.exe did not report a Manny version."
 }
 
-$version = $versionLine.Substring(4).Trim()
+$version = $versionLine.Substring("manny ".Length).Trim()
 if (-not $version -or $version.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) {
-	throw "Bob reported an invalid package version: '$version'."
+	throw "Manny reported an invalid package version: '$version'."
 }
 
-$packageName = "bob-$version-$Configuration"
+$packageName = "manny-$version-$Configuration"
 $packageRoot = [IO.Path]::GetFullPath((Join-Path $distributionRoot $packageName))
 $archivePath = [IO.Path]::GetFullPath((Join-Path $distributionRoot "$packageName.zip"))
 $resolvedDistributionRoot = [IO.Path]::GetFullPath($distributionRoot)
@@ -53,7 +53,7 @@ if (Test-Path -LiteralPath $archivePath) {
 $helloRoot = Join-Path $packageRoot "hello"
 $null = New-Item -ItemType Directory -Path $helloRoot -Force
 
-Copy-Item -LiteralPath $bobExecutable -Destination (Join-Path $packageRoot "bob.exe")
+Copy-Item -LiteralPath $mannyExecutable -Destination (Join-Path $packageRoot "manny.exe")
 Copy-Item -LiteralPath $licenseFile -Destination (Join-Path $packageRoot "LICENSE")
 Copy-Item -LiteralPath (Join-Path $exampleRoot "QUICKSTART.txt") -Destination (Join-Path $packageRoot "QUICKSTART.txt")
 

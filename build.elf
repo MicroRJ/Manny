@@ -3,10 +3,10 @@ core_sources := {
 	{ name = "base",               path = "src/base.c"                      },
 	{ name = "logger",             path = "src/logger.c"                    },
 	{ name = "profiler",           path = "src/profiler.c"                  },
-	{ name = "bob_atom",           path = "src/lib/bob_atom.c"              },
-	{ name = "bob",                path = "src/lib/bob.c"                   },
-	{ name = "bob_execution",      path = "src/lib/bob_execution.c"         },
-	{ name = "bob_build",          path = "src/lib/bob_build.c"             },
+	{ name = "manny_atom",         path = "src/lib/manny_atom.c"           },
+	{ name = "manny",              path = "src/lib/manny.c"                },
+	{ name = "manny_execution",    path = "src/lib/manny_execution.c"      },
+	{ name = "manny_build",        path = "src/lib/manny_build.c"          },
 	{ name = "build_record",        path = "src/lib/build_record.c"         },
 	{ name = "build_record_stream", path = "src/lib/build_record_stream.c"  },
 	{ name = "compiler_command",   path = "src/lib/compiler_command.c"       },
@@ -58,7 +58,7 @@ prepare_tests := {
 
 build_elf := {
 	name = "build Elf library",
-	command_line = "cmd /c \"cd /d elf && ..\\blessed\\bob.exe build.elf lib\"",
+	command_line = "cmd /c \"cd /d elf && ..\\blessed\\manny.exe build.elf lib\"",
 	inputs = {},
 	outputs = {},
 	include_dirs = {},
@@ -103,7 +103,7 @@ for source := blake3_sources[...] ? {
 
 build_platform := {
 	name = "build platform library",
-	command_line = "cmd /c \"cd /d platform && ..\\blessed\\bob.exe build.elf lib\"",
+	command_line = "cmd /c \"cd /d platform && ..\\blessed\\manny.exe build.elf lib\"",
 	inputs = {
 		"platform/build.elf",
 		"platform/include/platform.h",
@@ -116,18 +116,18 @@ build_platform := {
 	transparent = true,
 }
 
-bob_compiled := compile_source({
-	name = "bob_main",
-	source = "src/bob_main.c",
+manny_compiled := compile_source({
+	name = "manny_main",
+	source = "src/manny_main.c",
 	extra_options = "",
 })
-bob_dependencies := common_tasks:clone():extend({
-	bob_compiled.task,
+manny_dependencies := common_tasks:clone():extend({
+	manny_compiled.task,
 	build_elf,
 	build_platform,
 })
-bob_inputs := common_objects:clone():extend({
-	bob_compiled.object,
+manny_inputs := common_objects:clone():extend({
+	manny_compiled.object,
 	"elf/build/elf.lib",
 	"elf/build/elf_batteries.lib",
 	"platform/build/platform.lib",
@@ -135,13 +135,13 @@ bob_inputs := common_objects:clone():extend({
 common_object_options := " ":join(common_objects)
 common_object_options = f" ${common_object_options}"
 
-build_bob := {
-	name = "link Bob",
-	command_line = f"${cc} /nologo${common_object_options} ${bob_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Febuild\\bob.exe /link /DEBUG /PDB:build\\bob.pdb",
-	inputs = bob_inputs,
-	outputs = { "build/bob.exe" },
+build_manny := {
+	name = "link Manny",
+	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
+	inputs = manny_inputs,
+	outputs = { "build/manny.exe" },
 	include_dirs = {},
-	dependencies = bob_dependencies,
+	dependencies = manny_dependencies,
 }
 
 test_suites := {
@@ -224,21 +224,21 @@ options := {
 entries := {}
 
 entries.build = fun() {
-	ret bob.build({
-		targets = { build_bob },
+	ret manny.build({
+		targets = { build_manny },
 		options = options,
 	})
 }
 
 entries.test = fun() {
-	ret bob.build({
+	ret manny.build({
 		targets = test_targets,
 		options = options,
 	})
 }
 
 entries.stress = fun() {
-	ret bob.build({
+	ret manny.build({
 		targets = { run_stress_tests },
 		options = options,
 	})
@@ -276,32 +276,32 @@ run_line := fun(command)
 
 entries.bless = fun() {
 	fs := elf.fs
-	elf.assert(fs.is_file("build/bob.exe"), "build/bob.exe does not exist; build Bob before blessing it")
-	archive_directory := f"blessed/archive/${bob.version}"
-	archive := elf.path.join(archive_directory, "bob.exe")
+	elf.assert(fs.is_file("build/manny.exe"), "build/manny.exe does not exist; build Manny before blessing it")
+	archive_directory := f"blessed/archive/${manny.version}"
+	archive := elf.path.join(archive_directory, "manny.exe")
 	elf.assert(fs.create_directories(archive_directory), "could not create the blessed archive directory")
-	elf.assert(fs.copy_file("build/bob.exe", archive, true), "could not archive the new blessed Bob")
-	elf.assert(fs.copy_file("build/bob.exe", "blessed/bob.exe", true), "could not update blessed/bob.exe; run bless using build/bob.exe")
-	elf.printl(f"\x1b[1;33mBob ${bob.version} has been blessed. Go forth and compile.\x1b[0m")
+	elf.assert(fs.copy_file("build/manny.exe", archive, true), "could not archive the new blessed Manny")
+	elf.assert(fs.copy_file("build/manny.exe", "blessed/manny.exe", true), "could not update blessed/manny.exe; run bless using build/manny.exe")
+	elf.printl(f"\x1b[1;33mManny ${manny.version} has been blessed. Go forth and compile.\x1b[0m")
 	elf.printl(f"\x1b[2;36mThe sacred binary rests at ${archive}\x1b[0m")
 
-	bob_commit      := run_line("git rev-parse HEAD")
+	manny_commit    := run_line("git rev-parse HEAD")
 	elf_commit      := run_line("git -C elf rev-parse HEAD")
 	platform_commit := run_line("git -C platform rev-parse HEAD")
-	hash_result     := elf.process.run("certutil -hashfile build\\bob.exe SHA256")
-	elf.assert(hash_result.success, f"could not hash build/bob.exe\n${hash_result.stderr}")
+	hash_result     := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
+	elf.assert(hash_result.success, f"could not hash build/manny.exe\n${hash_result.stderr}")
 	hash_lines      := hash_result.stdout:lines()
 	elf.assert(hash_lines:length() >= 2, "certutil returned invalid hash output")
 	sha256          := hash_lines[1]
 
-	file_size := format_number(fs.read_text_file("build/bob.exe"):length())
+	file_size := format_number(fs.read_text_file("build/manny.exe"):length())
 
 	manifest :=
 	f"""
-	# Bob Manifest
+	# Manny Manifest
 	- target                     := windows-x64
-	- bob_version                := ${bob.version}
-	- bob_source_commit          := ${bob_commit}
+	- manny_version              := ${manny.version}
+	- manny_source_commit        := ${manny_commit}
 	- elf_version                := 0.2.0-dev
 	- elf_commit                 := ${elf_commit}
 	- platform_version           := 0.1.0-dev

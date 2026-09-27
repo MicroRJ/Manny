@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define VCVARS_CACHE_HEADER "BOB_VCVARS_CACHE_V1"
+#define VCVARS_CACHE_HEADER "MANNY_VCVARS_CACHE_V1"
 
 typedef struct Env_Entry {
 	String name;
@@ -210,13 +210,13 @@ static b32 ensure_cache_path(Arena *arena, String *path)
 	*path = (String){0};
 
 	String local_app_data;
-	if (!bob_platform_local_app_data(arena, &local_app_data)) goto failure;
+	if (!manny_platform_local_app_data(arena, &local_app_data)) goto failure;
 	if (!string_is_terminated(local_app_data)) goto failure;
 	char *start = local_app_data.data;
 	// Reuse the returned terminator as the next append position.
 	arena->used -= 1;
-	arena_append_text(arena, "\\bob");
-	b32 directory_ready = bob_platform_create_directory(string_from_range(start, (char *)arena_top(arena)));
+	arena_append_text(arena, "\\manny");
+	b32 directory_ready = manny_platform_create_directory(string_from_range(start, (char *)arena_top(arena)));
 	if (!directory_ready) goto failure;
 	arena_append_text(arena, "\\vcvars64.env");
 	*path = arena_string_from(arena, start);
@@ -240,7 +240,7 @@ static b32 apply_rule(String action, String name, String value)
 		return false;
 	}
 
-	if (!bob_platform_get_environment(string_from_cstring(name_text), scratch.arena, &current)) {
+	if (!manny_platform_get_environment(string_from_cstring(name_text), scratch.arena, &current)) {
 		end_scratch(scratch);
 		return false;
 	}
@@ -265,7 +265,7 @@ static b32 apply_rule(String action, String name, String value)
 		end_scratch(scratch);
 		return false;
 	}
-	success = bob_platform_set_environment(string_from_cstring(name_text), string_from_cstring(value_text));
+	success = manny_platform_set_environment(string_from_cstring(name_text), string_from_cstring(value_text));
 	end_scratch(scratch);
 	return success;
 }
@@ -316,7 +316,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 	String before_block;
 	String after_capture;
 	String cache;
-	Bob_Platform_Process_Result process;
+	Manny_Platform_Process_Result process;
 	b32 success = false;
 
 	String path;
@@ -331,7 +331,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 		goto cleanup;
 	}
 
-	if (!bob_platform_get_environment_block(arena, &before_block))
+	if (!manny_platform_get_environment_block(arena, &before_block))
 	{
 		log_error("unable to capture the current environment");
 		goto cleanup;
@@ -341,7 +341,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 		log_error("unable to parse the current environment");
 		goto cleanup;
 	}
-	if (!bob_platform_run_command(command, arena, (Bob_Platform_Process_Options){ .hide_window = true }, &process)) {
+	if (!manny_platform_run_command(command, arena, (Manny_Platform_Process_Options){ .hide_window = true }, &process)) {
 		log_error("unable to run vcvars64 (error %u)", process.error_code);
 		goto cleanup;
 	}
@@ -365,7 +365,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 		log_error("unable to serialize environment diff");
 		goto cleanup;
 	}
-	if (!bob_platform_write_entire_file(path, cache.data, cache.size))
+	if (!manny_platform_write_entire_file(path, cache.data, cache.size))
 	{
 		log_error("unable to write vcvars cache: %s", path.data);
 		goto cleanup;
@@ -388,7 +388,7 @@ b32 vcvars_cache_load(void)
 		end_scratch(scratch);
 		return false;
 	}
-	if (!bob_platform_read_entire_file(scratch.arena, path, &data)) {
+	if (!manny_platform_read_entire_file(scratch.arena, path, &data)) {
 		end_scratch(scratch);
 		return false;
 	}

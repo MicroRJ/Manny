@@ -8,12 +8,12 @@ static b32 get_test_executable(char *buffer, u32 buffer_size)
 
 static b32 test_builder_runs_in_parallel(void)
 {
-    Bob_Build *build = bob_build_create();
-    Bob *graph = bob_build_graph(build);
-    Bob_Node *a = test_add_node(graph, "slow a");
-    Bob_Node *b = test_add_node(graph, "slow b");
-    Bob_Node *link = test_add_node(graph, "link");
-    Bob_Task_Desc tasks[3] = {0};
+    Manny_Build *build = manny_build_create();
+    Manny *graph = manny_build_graph(build);
+    Manny_Node *a = test_add_node(graph, "slow a");
+    Manny_Node *b = test_add_node(graph, "slow b");
+    Manny_Node *link = test_add_node(graph, "link");
+    Manny_Task_Desc tasks[3] = {0};
     char executable[MAX_PATH];
     char command_a[2 * MAX_PATH];
     char command_b[2 * MAX_PATH];
@@ -25,9 +25,9 @@ static b32 test_builder_runs_in_parallel(void)
     b32 executed;
 
     CHECK(get_test_executable(executable, sizeof(executable)));
-    CHECK(snprintf(event_a_name, sizeof(event_a_name), "Local\\bob_graph_%lu_a",
+    CHECK(snprintf(event_a_name, sizeof(event_a_name), "Local\\manny_graph_%lu_a",
                    GetCurrentProcessId()) > 0);
-    CHECK(snprintf(event_b_name, sizeof(event_b_name), "Local\\bob_graph_%lu_b",
+    CHECK(snprintf(event_b_name, sizeof(event_b_name), "Local\\manny_graph_%lu_b",
                    GetCurrentProcessId()) > 0);
     event_a = CreateEventA(NULL, TRUE, FALSE, event_a_name);
     event_b = CreateEventA(NULL, TRUE, FALSE, event_b_name);
@@ -41,21 +41,21 @@ static b32 test_builder_runs_in_parallel(void)
     tasks[1].command_line = string_from_cstring(command_b);
     tasks[2].command_line = string_from_cstring(command_link);
 
-    CHECK_OK(bob_add_dependency(graph, link, a));
-    CHECK_OK(bob_add_dependency(graph, link, b));
+    CHECK_OK(manny_add_dependency(graph, link, a));
+    CHECK_OK(manny_add_dependency(graph, link, b));
 
     executed = test_run_tasks(build, tasks, 3, 2);
     CloseHandle(event_a);
     CloseHandle(event_b);
 
     CHECK(executed);
-    bob_build_destroy(build);
+    manny_build_destroy(build);
     return true;
 }
 
 typedef struct Build_Event_Test
 {
-	Bob_Node *node;
+	Manny_Node *node;
 	u32       callback_thread;
 	u32       started;
 	u32       completed;
@@ -63,12 +63,12 @@ typedef struct Build_Event_Test
 }
 Build_Event_Test;
 
-static void build_test_event(Bob_Event event, void *user_data)
+static void build_test_event(Manny_Event event, void *user_data)
 {
 	Build_Event_Test *test = user_data;
 	if (platform_current_thread_id() != test->callback_thread || event.node != test->node) test->valid = false;
-	if (event.type == BOB_EVENT_STARTED) ++test->started;
-	else if (event.type == BOB_EVENT_COMPLETED) {
+	if (event.type == MANNY_EVENT_STARTED) ++test->started;
+	else if (event.type == MANNY_EVENT_COMPLETED) {
 		if (!event.result.succeeded || !event.result.output) test->valid = false;
 		++test->completed;
 	}
@@ -77,10 +77,10 @@ static void build_test_event(Bob_Event event, void *user_data)
 
 static b32 test_builder_events(void)
 {
-	Bob_Build *build = bob_build_create();
-	Bob *graph = bob_build_graph(build);
-	Bob_Node *node = test_add_node(graph, "event task");
-	Bob_Task_Desc task = {0};
+	Manny_Build *build = manny_build_create();
+	Manny *graph = manny_build_graph(build);
+	Manny_Node *node = test_add_node(graph, "event task");
+	Manny_Task_Desc task = {0};
 	Build_Event_Test event = {
 		.node = node,
 		.callback_thread = platform_current_thread_id(),
@@ -92,26 +92,26 @@ static b32 test_builder_events(void)
 	CHECK(get_test_executable(executable, sizeof(executable)));
 	CHECK(snprintf(command, sizeof(command), "\"%s\" --child 0 0 event", executable) > 0);
 	task.command_line = string_from_cstring(command);
-	CHECK_OK(bob_set_task(build, node, task));
-	CHECK(bob_build(build, (Bob_Build_Params){
+	CHECK_OK(manny_set_task(build, node, task));
+	CHECK(manny_build(build, (Manny_Build_Params){
 		.worker_count = 1,
 		.user_data = &event,
 		.event = build_test_event,
 	}));
 	CHECK(event.valid && event.started == 1 && event.completed == 1);
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	return true;
 }
 
 static b32 test_builder_propagates_failure(void)
 {
     logger_set_muted(true);
-    Bob_Build *build = bob_build_create();
-    Bob *graph = bob_build_graph(build);
-    Bob_Node *fail = test_add_node(graph, "fail");
-    Bob_Node *blocked = test_add_node(graph, "blocked");
-    Bob_Node *independent = test_add_node(graph, "independent");
-    Bob_Task_Desc tasks[3] = {0};
+    Manny_Build *build = manny_build_create();
+    Manny *graph = manny_build_graph(build);
+    Manny_Node *fail = test_add_node(graph, "fail");
+    Manny_Node *blocked = test_add_node(graph, "blocked");
+    Manny_Node *independent = test_add_node(graph, "independent");
+    Manny_Task_Desc tasks[3] = {0};
     char executable[MAX_PATH];
     char fail_command[2 * MAX_PATH];
     char blocked_command[2 * MAX_PATH];
@@ -125,29 +125,29 @@ static b32 test_builder_propagates_failure(void)
     tasks[0].command_line = string_from_cstring(fail_command);
     tasks[1].command_line = string_from_cstring(blocked_command);
     tasks[2].command_line = string_from_cstring(independent_command);
-    CHECK_OK(bob_add_dependency(graph, blocked, fail));
+    CHECK_OK(manny_add_dependency(graph, blocked, fail));
 
     CHECK(!test_run_tasks(build, tasks, 3, 2));
-	CHECK(bob_task_state(build, fail) == BOB_NODE_FAILED);
-	CHECK(bob_task_state(build, blocked) == BOB_NODE_BLOCKED);
-	CHECK(bob_task_state(build, independent) == BOB_NODE_SUCCEEDED);
-    bob_build_destroy(build);
+	CHECK(manny_task_state(build, fail) == MANNY_NODE_FAILED);
+	CHECK(manny_task_state(build, blocked) == MANNY_NODE_BLOCKED);
+	CHECK(manny_task_state(build, independent) == MANNY_NODE_SUCCEEDED);
+    manny_build_destroy(build);
     logger_set_muted(false);
     return true;
 }
 
 static b32 test_builder_reports_missing_executable(void)
 {
-    Bob_Build *build = bob_build_create();
-    Bob *graph = bob_build_graph(build);
-    Bob_Node *missing = test_add_node(graph, "missing executable");
-    Bob_Task_Desc task = {
-        .command_line = LIT("bob_executable_that_does_not_exist_7f31.exe --input x.c")
+    Manny_Build *build = manny_build_create();
+    Manny *graph = manny_build_graph(build);
+    Manny_Node *missing = test_add_node(graph, "missing executable");
+    Manny_Task_Desc task = {
+        .command_line = LIT("manny_executable_that_does_not_exist_7f31.exe --input x.c")
     };
 
     CHECK(!test_run_tasks(build, &task, 1, 1));
-	CHECK(bob_task_state(build, missing) == BOB_NODE_FAILED);
-    bob_build_destroy(build);
+	CHECK(manny_task_state(build, missing) == MANNY_NODE_FAILED);
+    manny_build_destroy(build);
     return true;
 }
 
@@ -155,30 +155,30 @@ static b32 test_builder_skips_existing_output(void)
 {
     const char *output_path = "build\\incremental_test.out";
     String outputs[] = { string_from_cstring(output_path) };
-    Bob_Build *first_build;
-    Bob_Build *second_build;
-    Bob *first_graph;
-    Bob *second_graph;
-    Bob_Task_Desc task = {0};
-    Bob_Platform_File_Info info;
+    Manny_Build *first_build;
+    Manny_Build *second_build;
+    Manny *first_graph;
+    Manny *second_graph;
+    Manny_Task_Desc task = {0};
+    Manny_Platform_File_Info info;
 
     DeleteFileA(output_path);
     task.command_line = LIT("cmd /c echo built>build\\incremental_test.out");
     task.outputs = STRING_ARRAY_FROM(outputs);
 
-    first_build = bob_build_create();
-    first_graph = bob_build_graph(first_build);
+    first_build = manny_build_create();
+    first_graph = manny_build_graph(first_build);
     test_add_node(first_graph, "create output");
     CHECK(test_run_tasks(first_build, &task, 1, 1));
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &info));
-    bob_build_destroy(first_build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &info));
+    manny_build_destroy(first_build);
 
-    second_build = bob_build_create();
-    second_graph = bob_build_graph(second_build);
+    second_build = manny_build_create();
+    second_graph = manny_build_graph(second_build);
     test_add_node(second_graph, "skip existing output");
     CHECK(test_run_tasks(second_build, &task, 1, 1));
-	CHECK(bob_task_state(second_build, bob_node_at(second_graph, 0)) == BOB_NODE_SUCCEEDED);
-    bob_build_destroy(second_build);
+	CHECK(manny_task_state(second_build, manny_node_at(second_graph, 0)) == MANNY_NODE_SUCCEEDED);
+    manny_build_destroy(second_build);
 
     CHECK(DeleteFileA(output_path));
 	return true;
@@ -190,7 +190,7 @@ static b32 test_directory_output_stays_clean(void)
 	const char *child = "build\\directory_output_test\\child.txt";
 	String directory_outputs[] = { LIT("build/directory_output_test") };
 	String child_outputs[] = { LIT("build/directory_output_test/child.txt") };
-	Bob_Task_Desc tasks[2] = {
+	Manny_Task_Desc tasks[2] = {
 		{
 			.command_line = LIT("cmd /c if not exist build\\directory_output_test mkdir build\\directory_output_test"),
 			.outputs = STRING_ARRAY_FROM(directory_outputs),
@@ -200,34 +200,34 @@ static b32 test_directory_output_stays_clean(void)
 			.outputs = STRING_ARRAY_FROM(child_outputs),
 		},
 	};
-	Bob_Platform_File_Info before;
-	Bob_Platform_File_Info after;
-	Bob_Build *build;
-	Bob *graph;
-	Bob_Node *prepare;
-	Bob_Node *write_child;
+	Manny_Platform_File_Info before;
+	Manny_Platform_File_Info after;
+	Manny_Build *build;
+	Manny *graph;
+	Manny_Node *prepare;
+	Manny_Node *write_child;
 
 	CHECK(platform_remove_tree(directory));
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	prepare = test_add_node(graph, "prepare output directory");
 	write_child = test_add_node(graph, "write child output");
-	CHECK_OK(bob_add_dependency(graph, write_child, prepare));
+	CHECK_OK(manny_add_dependency(graph, write_child, prepare));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(child), &before));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(child), &before));
 
 	Sleep(20);
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	prepare = test_add_node(graph, "prepare output directory");
 	write_child = test_add_node(graph, "write child output");
-	CHECK_OK(bob_add_dependency(graph, write_child, prepare));
+	CHECK_OK(manny_add_dependency(graph, write_child, prepare));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(child), &after));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(child), &after));
 	CHECK(after.modified_unix_ms == before.modified_unix_ms);
 	CHECK(platform_remove_tree(directory));
 	return true;
@@ -239,57 +239,57 @@ static b32 test_task_fingerprint_rebuilds(void)
 	String outputs[] = { LIT("build/fingerprint_test.out") };
 	String first_includes[] = { LIT("include/first") };
 	String second_includes[] = { LIT("include/second") };
-	Bob_Task_Desc task = {
+	Manny_Task_Desc task = {
 		.command_line = LIT("cmd /c echo first>build\\fingerprint_test.out"),
 		.outputs = STRING_ARRAY_FROM(outputs),
 		.include_directories = STRING_ARRAY_FROM(first_includes),
 	};
-	Bob_Platform_File_Info first;
-	Bob_Platform_File_Info unchanged;
-	Bob_Platform_File_Info command_changed;
-	Bob_Platform_File_Info metadata_changed;
-	Bob_Build *build;
-	Bob *graph;
+	Manny_Platform_File_Info first;
+	Manny_Platform_File_Info unchanged;
+	Manny_Platform_File_Info command_changed;
+	Manny_Platform_File_Info metadata_changed;
+	Manny_Build *build;
+	Manny *graph;
 
 	CHECK(platform_remove_file(output_path));
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	test_add_node(graph, "initial fingerprint");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &first));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &first));
 
 	Sleep(20);
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	test_add_node(graph, "unchanged fingerprint");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &unchanged));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &unchanged));
 	CHECK(unchanged.modified_unix_ms == first.modified_unix_ms);
 
 	Sleep(20);
 	task.command_line = LIT("cmd /c echo second>build\\fingerprint_test.out");
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	test_add_node(graph, "changed command fingerprint");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &command_changed));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &command_changed));
 	CHECK(command_changed.modified_unix_ms != unchanged.modified_unix_ms);
 
 	Sleep(20);
 	task.include_directories = STRING_ARRAY_FROM(second_includes);
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 	test_add_node(graph, "changed metadata fingerprint");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &metadata_changed));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &metadata_changed));
 	CHECK(metadata_changed.modified_unix_ms != command_changed.modified_unix_ms);
 
 	CHECK(platform_remove_file(output_path));
@@ -319,12 +319,12 @@ static b32 test_newer_input_rebuilds(void)
 	const char *output_path = "build\\newer_input_test.out";
     String inputs[] = { string_from_cstring(input_path) };
     String outputs[] = { string_from_cstring(output_path) };
-	Bob_Task_Desc task = {0};
-	Bob_Build *clean_build;
-	Bob_Build *dirty_build;
-	Bob *clean_graph;
-	Bob *dirty_graph;
-	Bob_Platform_File_Info output_info;
+	Manny_Task_Desc task = {0};
+	Manny_Build *clean_build;
+	Manny_Build *dirty_build;
+	Manny *clean_graph;
+	Manny *dirty_graph;
+	Manny_Platform_File_Info output_info;
 
 	CHECK(write_test_file_at_time(input_path, 0ULL));
 	CHECK(platform_remove_file(output_path));
@@ -332,19 +332,19 @@ static b32 test_newer_input_rebuilds(void)
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
 
-	clean_build = bob_build_create();
-    clean_graph = bob_build_graph(clean_build);
+	clean_build = manny_build_create();
+    clean_graph = manny_build_graph(clean_build);
 	test_add_node(clean_graph, "prime timestamp state");
 	CHECK(test_run_tasks(clean_build, &task, 1, 1));
-	bob_build_destroy(clean_build);
+	manny_build_destroy(clean_build);
 
-	CHECK(bob_platform_file_info(string_from_cstring(output_path), &output_info));
+	CHECK(manny_platform_file_info(string_from_cstring(output_path), &output_info));
 	CHECK(write_test_file_at_time(input_path, (u64)output_info.modified_unix_ms + 1000));
-	dirty_build = bob_build_create();
-	dirty_graph = bob_build_graph(dirty_build);
+	dirty_build = manny_build_create();
+	dirty_graph = manny_build_graph(dirty_build);
     test_add_node(dirty_graph, "dirty timestamps");
     CHECK(test_run_tasks(dirty_build, &task, 1, 1));
-    bob_build_destroy(dirty_build);
+    manny_build_destroy(dirty_build);
 
     CHECK(DeleteFileA(input_path));
     CHECK(DeleteFileA(output_path));
@@ -360,10 +360,10 @@ static b32 test_multiple_inputs_and_outputs(void)
     const char *marker = "build\\multi.marker";
     String inputs[] = { string_from_cstring(input_a), string_from_cstring(input_b) };
     String outputs[] = { string_from_cstring(output_a), string_from_cstring(output_b) };
-    Bob_Task_Desc task = {0};
-    Bob_Build *build;
-    Bob *graph;
-    Bob_Platform_File_Info info;
+    Manny_Task_Desc task = {0};
+    Manny_Build *build;
+    Manny *graph;
+    Manny_Platform_File_Info info;
 
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(input_a, 100ULL));
@@ -374,38 +374,38 @@ static b32 test_multiple_inputs_and_outputs(void)
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
 
-	build = bob_build_create();
-    graph = bob_build_graph(build);
+	build = manny_build_create();
+    graph = manny_build_graph(build);
 	test_add_node(graph, "prime multiple files");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	CHECK(DeleteFileA(marker));
 
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	test_add_node(graph, "clean multiple files");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	CHECK(!bob_platform_file_info(string_from_cstring(marker), &info));
-	bob_build_destroy(build);
+	CHECK(!manny_platform_file_info(string_from_cstring(marker), &info));
+	manny_build_destroy(build);
 
-	CHECK(bob_platform_file_info(string_from_cstring(output_a), &info));
+	CHECK(manny_platform_file_info(string_from_cstring(output_a), &info));
 	CHECK(write_test_file_at_time(input_b, (u64)info.modified_unix_ms + 1000));
-	build = bob_build_create();
-    graph = bob_build_graph(build);
+	build = manny_build_create();
+    graph = manny_build_graph(build);
     test_add_node(graph, "newest input wins");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	CHECK(bob_platform_file_info(string_from_cstring(marker), &info));
-    bob_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(marker), &info));
+    manny_build_destroy(build);
 
     CHECK(DeleteFileA(output_b));
     CHECK(DeleteFileA(marker));
-	build = bob_build_create();
-    graph = bob_build_graph(build);
+	build = manny_build_create();
+    graph = manny_build_graph(build);
     test_add_node(graph, "one output missing");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	CHECK(bob_platform_file_info(string_from_cstring(output_b), &info));
-	CHECK(bob_platform_file_info(string_from_cstring(marker), &info));
-    bob_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(output_b), &info));
+	CHECK(manny_platform_file_info(string_from_cstring(marker), &info));
+    manny_build_destroy(build);
 
     CHECK(DeleteFileA(input_a));
     CHECK(DeleteFileA(input_b));
@@ -424,12 +424,12 @@ static b32 test_dependency_rebuild_propagates(void)
     String dependency_inputs[] = { string_from_cstring(dependency_input) };
     String dependency_outputs[] = { string_from_cstring(dependency_output) };
     String parent_outputs[] = { string_from_cstring(parent_output) };
-    Bob_Task_Desc tasks[2] = {0};
-    Bob_Build *build;
-    Bob *graph;
-    Bob_Node *dependency;
-    Bob_Node *parent;
-    Bob_Platform_File_Info info;
+    Manny_Task_Desc tasks[2] = {0};
+    Manny_Build *build;
+    Manny *graph;
+    Manny_Node *dependency;
+    Manny_Node *parent;
+    Manny_Platform_File_Info info;
 
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(dependency_input, 100ULL));
@@ -442,25 +442,25 @@ static b32 test_dependency_rebuild_propagates(void)
 	tasks[1].command_line = LIT("cmd /c echo parent>build\\parent.out && echo rebuilt>build\\parent.marker");
     tasks[1].outputs = STRING_ARRAY_FROM(parent_outputs);
 
-	build = bob_build_create();
-    graph = bob_build_graph(build);
+	build = manny_build_create();
+    graph = manny_build_graph(build);
 	dependency = test_add_node(graph, "prime dependency");
 	parent = test_add_node(graph, "prime parent");
-    CHECK_OK(bob_add_dependency(graph, parent, dependency));
+    CHECK_OK(manny_add_dependency(graph, parent, dependency));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 	CHECK(DeleteFileA(marker));
 
-	CHECK(bob_platform_file_info(string_from_cstring(dependency_output), &info));
+	CHECK(manny_platform_file_info(string_from_cstring(dependency_output), &info));
 	CHECK(write_test_file_at_time(dependency_input, (u64)info.modified_unix_ms + 1000));
-	build = bob_build_create();
-    graph = bob_build_graph(build);
+	build = manny_build_create();
+    graph = manny_build_graph(build);
     dependency = test_add_node(graph, "dirty dependency");
     parent = test_add_node(graph, "propagated parent");
-    CHECK_OK(bob_add_dependency(graph, parent, dependency));
+    CHECK_OK(manny_add_dependency(graph, parent, dependency));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	CHECK(bob_platform_file_info(string_from_cstring(marker), &info));
-    bob_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(marker), &info));
+    manny_build_destroy(build);
 
     CHECK(DeleteFileA(dependency_input));
     CHECK(DeleteFileA(dependency_output));
@@ -473,31 +473,31 @@ static b32 test_transparent_dependency(void)
 {
 	const char *parent_output = "build\\transparent_parent.out";
 	String parent_outputs[] = { string_from_cstring(parent_output) };
-	Bob_Task_Desc tasks[2] = {0};
+	Manny_Task_Desc tasks[2] = {0};
 	CHECK(platform_remove_file(parent_output));
 	tasks[0].command_line = LIT("cmd /c exit /b 0");
 	tasks[0].transparent = true;
 	tasks[1].command_line = LIT("cmd /c echo parent>build\\transparent_parent.out");
 	tasks[1].outputs = STRING_ARRAY_FROM(parent_outputs);
-	Bob_Build *build = bob_build_create();
-	Bob *graph = bob_build_graph(build);
-	Bob_Node *dependency = test_add_node(graph, "prime transparent dependency");
-	Bob_Node *parent = test_add_node(graph, "prime transparent parent");
-	CHECK_OK(bob_add_dependency(graph, parent, dependency));
+	Manny_Build *build = manny_build_create();
+	Manny *graph = manny_build_graph(build);
+	Manny_Node *dependency = test_add_node(graph, "prime transparent dependency");
+	Manny_Node *parent = test_add_node(graph, "prime transparent parent");
+	CHECK_OK(manny_add_dependency(graph, parent, dependency));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	bob_build_destroy(build);
-	Bob_Platform_File_Info before;
-	Bob_Platform_File_Info after;
-	CHECK(bob_platform_file_info(string_from_cstring(parent_output), &before));
+	manny_build_destroy(build);
+	Manny_Platform_File_Info before;
+	Manny_Platform_File_Info after;
+	CHECK(manny_platform_file_info(string_from_cstring(parent_output), &before));
 	Sleep(20);
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	dependency = test_add_node(graph, "transparent dependency");
 	parent = test_add_node(graph, "clean transparent parent");
-	CHECK_OK(bob_add_dependency(graph, parent, dependency));
+	CHECK_OK(manny_add_dependency(graph, parent, dependency));
 	CHECK(test_run_tasks(build, tasks, 2, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(parent_output), &after));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(parent_output), &after));
 	CHECK(after.modified_unix_ms == before.modified_unix_ms);
 	CHECK(DeleteFileA(parent_output));
 	return true;
@@ -510,32 +510,32 @@ static b32 test_task_working_directory(void)
 		"build\\task_working_directory\\result.out";
 	const char *unresolved_output = "result.out";
 	String outputs[] = { LIT("result.out") };
-	Bob_Task_Desc task = {
+	Manny_Task_Desc task = {
 		.command_line = LIT("cmd /c echo built>result.out"),
 		.working_directory = LIT("build\\task_working_directory"),
 		.outputs = STRING_ARRAY_FROM(outputs),
 	};
-	Bob_Build *build;
-	Bob *graph;
-	Bob_Platform_File_Info info;
+	Manny_Build *build;
+	Manny *graph;
+	Manny_Platform_File_Info info;
 
 	DeleteFileA(resolved_output);
 	DeleteFileA(unresolved_output);
 	if (!CreateDirectoryA(directory, NULL) &&
 		GetLastError() != ERROR_ALREADY_EXISTS) return false;
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	test_add_node(graph, "working directory output");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
-	CHECK(bob_platform_file_info(string_from_cstring(resolved_output), &info));
-	CHECK(!bob_platform_file_info(string_from_cstring(unresolved_output), &info));
+	manny_build_destroy(build);
+	CHECK(manny_platform_file_info(string_from_cstring(resolved_output), &info));
+	CHECK(!manny_platform_file_info(string_from_cstring(unresolved_output), &info));
 
-	build = bob_build_create();
-	graph = bob_build_graph(build);
+	build = manny_build_create();
+	graph = manny_build_graph(build);
 	test_add_node(graph, "working directory incremental output");
 	CHECK(test_run_tasks(build, &task, 1, 1));
-	bob_build_destroy(build);
+	manny_build_destroy(build);
 
 	CHECK(DeleteFileA(resolved_output));
 	CHECK(RemoveDirectoryA(directory));
@@ -564,19 +564,19 @@ int main(int argument_count, char **arguments)
 		printf("%s\n", arguments[4]);
 		return 0;
 	}
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_builder_runs_in_parallel),
-		BOB_TEST(test_builder_events),
-		BOB_TEST(test_builder_propagates_failure),
-		BOB_TEST(test_builder_reports_missing_executable),
-		BOB_TEST(test_builder_skips_existing_output),
-		BOB_TEST(test_directory_output_stays_clean),
-		BOB_TEST(test_task_fingerprint_rebuilds),
-		BOB_TEST(test_newer_input_rebuilds),
-		BOB_TEST(test_multiple_inputs_and_outputs),
-		BOB_TEST(test_dependency_rebuild_propagates),
-		BOB_TEST(test_transparent_dependency),
-		BOB_TEST(test_task_working_directory),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_builder_runs_in_parallel),
+		MANNY_TEST(test_builder_events),
+		MANNY_TEST(test_builder_propagates_failure),
+		MANNY_TEST(test_builder_reports_missing_executable),
+		MANNY_TEST(test_builder_skips_existing_output),
+		MANNY_TEST(test_directory_output_stays_clean),
+		MANNY_TEST(test_task_fingerprint_rebuilds),
+		MANNY_TEST(test_newer_input_rebuilds),
+		MANNY_TEST(test_multiple_inputs_and_outputs),
+		MANNY_TEST(test_dependency_rebuild_propagates),
+		MANNY_TEST(test_transparent_dependency),
+		MANNY_TEST(test_task_working_directory),
 	};
 	return test_run_suite("build", tests, ARRAY_COUNT(tests));
 }

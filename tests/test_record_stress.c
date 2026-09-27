@@ -1,15 +1,15 @@
 #include "test.h"
 
-static Bob_Path test_path(Bob_Build *build, String source)
+static Manny_Path test_path(Manny_Build *build, String source)
 {
-	Bob_Path result = {0};
-	if (build) bob_path_resolve(build, bob_build_root(build), source, &result);
+	Manny_Path result = {0};
+	if (build) manny_path_resolve(build, manny_build_root(build), source, &result);
 	return result;
 }
 
-static Bob_Fingerprint test_fingerprint(String value)
+static Manny_Fingerprint test_fingerprint(String value)
 {
-	Bob_Fingerprint result;
+	Manny_Fingerprint result;
 	blake3_hasher hasher;
 	blake3_hasher_init(&hasher);
 	blake3_hasher_update(&hasher, value.data, (size_t)value.size);
@@ -20,7 +20,7 @@ static Bob_Fingerprint test_fingerprint(String value)
 static b32 test_record_stress(void)
 {
 	enum { TASK_COUNT = 1886, DEPENDENCY_COUNT = 300 };
-	Bob_Build *bob = bob_build_create();
+	Manny_Build *manny = manny_build_create();
 	Arena source_arena = arena_create(MEGABYTES(1));
 	Arena state_arena = arena_create(MEGABYTES(16));
 	Arena loaded_arena = arena_create(MEGABYTES(16));
@@ -28,10 +28,10 @@ static b32 test_record_stress(void)
 	Build_Record_Stream state_stream = {0};
 	Build_Record_Stream loaded_stream = {0};
 	String_Array dependencies = {0};
-	Bob_Path_Array dependency_paths = {0};
+	Manny_Path_Array dependency_paths = {0};
 	String root = LIT("build\\build_state_stress");
 	String path = LIT("build\\build_state_stress\\state");
-	Bob_Platform_File_Info info;
+	Manny_Platform_File_Info info;
 	u64 frequency = platform_counter_frequency();
 	u64 construction_started;
 	u64 construction_finished;
@@ -51,13 +51,13 @@ static b32 test_record_stress(void)
 		}                                                                          \
 	} while (0)
 
-	CHECK_STRESS(bob && source_arena.data && state_arena.data && loaded_arena.data && snapshot_arena.data);
-	CHECK_STRESS(build_record_stream_init(&state_stream, &state_arena, bob) && build_record_stream_init(&loaded_stream, &loaded_arena, bob));
+	CHECK_STRESS(manny && source_arena.data && state_arena.data && loaded_arena.data && snapshot_arena.data);
+	CHECK_STRESS(build_record_stream_init(&state_stream, &state_arena, manny) && build_record_stream_init(&loaded_stream, &loaded_arena, manny));
 	CHECK_STRESS(platform_remove_tree(root.data));
 	CHECK_STRESS(build_record_stream_compact(&state_stream, path));
 	dependencies.items = arena_push_zero_aligned(&source_arena,
 		DEPENDENCY_COUNT * sizeof(*dependencies.items), _Alignof(String));
-	dependency_paths.items = arena_push_zero_aligned(&source_arena, DEPENDENCY_COUNT * sizeof(*dependency_paths.items), _Alignof(Bob_Path));
+	dependency_paths.items = arena_push_zero_aligned(&source_arena, DEPENDENCY_COUNT * sizeof(*dependency_paths.items), _Alignof(Manny_Path));
 	CHECK_STRESS(dependencies.items != NULL && dependency_paths.items != NULL);
 	for (u32 i = 0; i < DEPENDENCY_COUNT; ++i) {
 		char path[256];
@@ -68,8 +68,8 @@ static b32 test_record_stress(void)
 		dependencies.items[i] = str_push_copy(&source_arena,
 			string_from_data(path, (u64)length));
 		CHECK_STRESS(dependencies.items[i].data != NULL);
-		dependency_paths.items[i] = test_path(bob, dependencies.items[i]);
-		CHECK_STRESS(bob_path_is_valid(dependency_paths.items[i]));
+		dependency_paths.items[i] = test_path(manny, dependencies.items[i]);
+		CHECK_STRESS(manny_path_is_valid(dependency_paths.items[i]));
 		++dependencies.count;
 		++dependency_paths.count;
 	}
@@ -81,7 +81,7 @@ static b32 test_record_stress(void)
 			"build\\godot\\synthetic_%04u.windows.template_debug.x86_64.o", i);
 		CHECK_STRESS(length > 0 && (size_t)length < sizeof(output));
 		CHECK_STRESS(build_record_stream_append_set(&state_stream, path, (Build_Record_Task){
-			.output = test_path(bob, string_from_data(output, (u64)length)),
+			.output = test_path(manny, string_from_data(output, (u64)length)),
 			.fingerprint = test_fingerprint(string_from_data(output, (u64)length)),
 			.dependencies = dependency_paths,
 		}));
@@ -89,7 +89,7 @@ static b32 test_record_stress(void)
 	construction_finished = platform_counter();
 	CHECK_STRESS(build_record_stream_compact(&state_stream, path));
 	save_finished = platform_counter();
-	CHECK_STRESS(bob_platform_file_info(path, &info));
+	CHECK_STRESS(manny_platform_file_info(path, &info));
 	CHECK_STRESS(build_record_stream_load(&loaded_stream, path) ==
 		BUILD_RECORD_OK);
 	load_finished = platform_counter();
@@ -97,8 +97,8 @@ static b32 test_record_stress(void)
 	CHECK_STRESS(build_record_stream_snapshot(&loaded_stream, &snapshot_arena, &snapshot));
 	CHECK_STRESS(snapshot.task_count == TASK_COUNT);
 	Build_Record_Task task;
-	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(bob, LIT("build\\godot\\synthetic_0000.windows.template_debug.x86_64.o")), &task));
-	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(bob, LIT("build\\godot\\synthetic_1885.windows.template_debug.x86_64.o")), &task));
+	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_0000.windows.template_debug.x86_64.o")), &task));
+	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_1885.windows.template_debug.x86_64.o")), &task));
 
 	printf("\n  record-stream stress measurements\n");
 	printf("    tasks: %u\n", (u32)TASK_COUNT);
@@ -125,7 +125,7 @@ cleanup:
 	arena_destroy(&loaded_arena);
 	arena_destroy(&state_arena);
 	arena_destroy(&source_arena);
-	bob_build_destroy(bob);
+	manny_build_destroy(manny);
 #undef CHECK_STRESS
 	return result;
 }
@@ -133,8 +133,8 @@ cleanup:
 
 int main(void)
 {
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_record_stress),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_record_stress),
 	};
 	return test_run_suite("record stress", tests, ARRAY_COUNT(tests));
 }

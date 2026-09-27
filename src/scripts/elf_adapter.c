@@ -1,7 +1,7 @@
 #include "elf_adapter.h"
 #include "elf_batteries.h"
 
-#include "bob_build.h"
+#include "manny_build.h"
 #include "elf.h"
 #include "logger.h"
 #include "platform_adapter.h"
@@ -226,7 +226,7 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 		elf_set_top(state, task_checkpoint);
 	}
 
-	result->build = build_root.data ? bob_build_create_at(build_root) : bob_build_create();
+	result->build = build_root.data ? manny_build_create_at(build_root) : manny_build_create();
 	if (!result->build) {
 		if (build_root.data) snprintf(result->error, sizeof(result->error), "unable to create build at root '%s'", build_root.data);
 		else snprintf(result->error, sizeof(result->error), "unable to create build");
@@ -240,7 +240,7 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 		elf_push_ref(state, task_tables.items[i]);
 		elf_i32 description = elf_abs_index(state, -1);
 
-		Bob_Task_Desc task = {0};
+		Manny_Task_Desc task = {0};
 
 		elf_get_field(state, description, "name");
 		task.name = copy_stack_string(scratch.arena, state, -1);
@@ -275,10 +275,10 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 		if (!copy_string_array_field(state, scratch.arena, description, "inputs", task.name, &task.inputs, result->error, sizeof(result->error))) goto cleanup;
 		if (!copy_string_array_field(state, scratch.arena, description, "outputs", task.name, &task.outputs, result->error, sizeof(result->error))) goto cleanup;
 		if (!copy_string_array_field(state, scratch.arena, description, "include_dirs", task.name, &task.include_directories, result->error, sizeof(result->error))) goto cleanup;
-		Bob_Node *node;
-		Bob_Error bob_error = bob_add_task(result->build, task, &node);
-		if (bob_error != BOB_OK) {
-			snprintf(result->error, sizeof(result->error), "unable to add task '%s': %s", task.name.data, bob_error_string(bob_error));
+		Manny_Node *node;
+		Manny_Error manny_error = manny_add_task(result->build, task, &node);
+		if (manny_error != MANNY_OK) {
+			snprintf(result->error, sizeof(result->error), "unable to add task '%s': %s", task.name.data, manny_error_string(manny_error));
 			goto cleanup;
 		}
 		elf_set_top(state, task_checkpoint);
@@ -306,12 +306,12 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 				snprintf(result->error, sizeof(result->error), "unable to resolve dependency for task %u", i);
 				goto cleanup;
 			}
-			Bob *graph = bob_build_graph(result->build);
-			Bob_Node *node = bob_node_at(graph, i);
-			Bob_Node *dependency_node = bob_node_at(graph, resolved);
-			Bob_Error bob_error = bob_add_dependency(graph, node, dependency_node);
-			if (bob_error != BOB_OK) {
-				snprintf(result->error, sizeof(result->error), "unable to add dependency to '%s': %s", bob_task_name(node), bob_error_string(bob_error));
+			Manny *graph = manny_build_graph(result->build);
+			Manny_Node *node = manny_node_at(graph, i);
+			Manny_Node *dependency_node = manny_node_at(graph, resolved);
+			Manny_Error manny_error = manny_add_dependency(graph, node, dependency_node);
+			if (manny_error != MANNY_OK) {
+				snprintf(result->error, sizeof(result->error), "unable to add dependency to '%s': %s", manny_task_name(node), manny_error_string(manny_error));
 				goto cleanup;
 			}
 		}
@@ -327,7 +327,7 @@ cleanup:
 	{
 		char error[sizeof(result->error)];
 		memcpy(error, result->error, sizeof(error));
-		bob_build_destroy(result->build);
+		manny_build_destroy(result->build);
 		memset(result, 0, sizeof(*result));
 		memcpy(result->error, error, sizeof(error));
 	}
@@ -345,7 +345,7 @@ b32 elf_script_read_build(Script *script, Script_Build *result)
 	return success;
 }
 
-ELF_FUNCTION(l_bob_build)
+ELF_FUNCTION(l_manny_build)
 {
 	(void)nargs;
 	(void)nrets;
@@ -362,12 +362,12 @@ ELF_FUNCTION(l_bob_build)
 	Script_Options options = script_options_resolve(build.options, script->command_line_options);
 	logger_set_verbosity(options.verbosity);
 	Profile_Scope scope = profile_scope_begin("builder");
-	b32 succeeded = bob_build(build.build, (Bob_Build_Params){
+	b32 succeeded = manny_build(build.build, (Manny_Build_Params){
 		.worker_count = options.worker_count,
 		.explain = script->command_line_options.explain,
 	});
 	profile_scope_end(&scope);
-	bob_build_destroy(build.build);
+	manny_build_destroy(build.build);
 	if (!succeeded) {
 		script_set_error(script, "build failed");
 		script->failed = true;
@@ -376,17 +376,17 @@ ELF_FUNCTION(l_bob_build)
 	return 1;
 }
 
-static b32 register_bob_library(elf_State *state)
+static b32 register_manny_library(elf_State *state)
 {
 	elf_i32 checkpoint = elf_get_top(state);
 	elf_new_table(state);
-	elf_i32 bob = elf_abs_index(state, -1);
+	elf_i32 manny = elf_abs_index(state, -1);
 
-	if (!set_function(state, bob, "build", l_bob_build)) goto error;
-	elf_push_cstr(state, BOB_VERSION);
-	if (!elf_set_field(state, bob, "version")) goto error;
+	if (!set_function(state, manny, "build", l_manny_build)) goto error;
+	elf_push_cstr(state, MANNY_VERSION);
+	if (!elf_set_field(state, manny, "version")) goto error;
 
-	if (!elf_set_global(state, "bob")) goto error;
+	if (!elf_set_global(state, "manny")) goto error;
 	return true;
 
 error:
@@ -405,8 +405,8 @@ b32 elf_script_load(Script *script, String path, String source)
 	}
 	elf_set_user_data(elf->state, script);
 	elf_open_batteries(elf->state);
-	if (!register_bob_library(elf->state)) {
-		script_set_error(script, "unable to register Bob script libraries");
+	if (!register_manny_library(elf->state)) {
+		script_set_error(script, "unable to register Manny script libraries");
 		return false;
 	}
 

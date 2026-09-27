@@ -1,9 +1,9 @@
 #include "platform_adapter.h"
 #include "platform.h"
 
-#define BOB_PLATFORM_ERROR_OUT_OF_MEMORY UINT32_MAX
+#define MANNY_PLATFORM_ERROR_OUT_OF_MEMORY UINT32_MAX
 
-b32 bob_platform_file_info(String path, Bob_Platform_File_Info *info)
+b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
 {
 	Platform_File_Info shared;
 	if (!string_is_terminated(path) || !info || !platform_get_file_info(path.data, &shared)) return false;
@@ -13,7 +13,7 @@ b32 bob_platform_file_info(String path, Bob_Platform_File_Info *info)
 	return true;
 }
 
-b32 bob_platform_current_directory(Arena *arena, String *result)
+b32 manny_platform_current_directory(Arena *arena, String *result)
 {
 	if (!arena || !result) return false;
 	Platform_String_Result query = platform_get_current_directory(NULL, 0);
@@ -31,7 +31,7 @@ b32 bob_platform_current_directory(Arena *arena, String *result)
 	return true;
 }
 
-b32 bob_platform_absolute_path(Arena *arena, String path, String *result)
+b32 manny_platform_absolute_path(Arena *arena, String path, String *result)
 {
 	if (!arena || !result || !string_is_terminated(path)) return false;
 	Platform_String_Result query = platform_get_absolute_path(path.data, NULL, 0);
@@ -49,7 +49,7 @@ b32 bob_platform_absolute_path(Arena *arena, String path, String *result)
 	return true;
 }
 
-b32 bob_platform_read_entire_file(Arena *arena, String path, String *result)
+b32 manny_platform_read_entire_file(Arena *arena, String path, String *result)
 {
 	if (!arena || !result || !string_is_terminated(path)) return false;
 	u64 mark = arena_mark(arena);
@@ -74,7 +74,7 @@ failure:
 	return false;
 }
 
-b32 bob_platform_write_entire_file(String path, const void *data, size_t size)
+b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 {
 	if (!string_is_terminated(path) || (!data && size)) return false;
 	Platform_File file = platform_access_file(path.data, PLATFORM_FILE_CREATE_ALWAYS, PLATFORM_FILE_WRITE);
@@ -85,17 +85,17 @@ b32 bob_platform_write_entire_file(String path, const void *data, size_t size)
 	return result;
 }
 
-b32 bob_platform_create_directory(String path)
+b32 manny_platform_create_directory(String path)
 {
 	return string_is_terminated(path) && platform_create_directory(path.data);
 }
 
-b32 bob_platform_executable_resolves(String name)
+b32 manny_platform_executable_resolves(String name)
 {
 	return string_is_terminated(name) && platform_executable_resolves(name.data);
 }
 
-b32 bob_platform_get_environment(String name, Arena *arena, String *value)
+b32 manny_platform_get_environment(String name, Arena *arena, String *value)
 {
 	if (!string_is_terminated(name) || !arena || !value) return false;
 	*value = (String){0};
@@ -115,7 +115,7 @@ b32 bob_platform_get_environment(String name, Arena *arena, String *value)
 	return true;
 }
 
-b32 bob_platform_get_environment_block(Arena *arena, String *block)
+b32 manny_platform_get_environment_block(Arena *arena, String *block)
 {
 	if (!arena || !block) return false;
 	*block = (String){0};
@@ -134,15 +134,15 @@ b32 bob_platform_get_environment_block(Arena *arena, String *block)
 	return true;
 }
 
-b32 bob_platform_set_environment(String name, String value)
+b32 manny_platform_set_environment(String name, String value)
 {
 	if (!string_is_terminated(name) || (value.data && !string_is_terminated(value))) return false;
 	return platform_set_environment(name.data, value.data).error == 0;
 }
 
-b32 bob_platform_local_app_data(Arena *arena, String *result)
+b32 manny_platform_local_app_data(Arena *arena, String *result)
 {
-	return bob_platform_get_environment(LIT("LOCALAPPDATA"), arena, result) && result->size > 0;
+	return manny_platform_get_environment(LIT("LOCALAPPDATA"), arena, result) && result->size > 0;
 }
 
 static b32 append_process_pipe(Platform_Process *process, Arena *arena, b32 standard_error, u32 *error_code)
@@ -154,13 +154,13 @@ static b32 append_process_pipe(Platform_Process *process, Arena *arena, b32 stan
 		return false;
 	}
 	if (read.size && !arena_push_copy(arena, read.size, buffer)) {
-		*error_code = BOB_PLATFORM_ERROR_OUT_OF_MEMORY;
+		*error_code = MANNY_PLATFORM_ERROR_OUT_OF_MEMORY;
 		return false;
 	}
 	return read.size != 0;
 }
 
-b32 bob_platform_run_command(String command_line, Arena *arena, Bob_Platform_Process_Options options, Bob_Platform_Process_Result *result)
+b32 manny_platform_run_command(String command_line, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result)
 {
 	u64 mark;
 	Platform_Process_Start_Result start;
@@ -169,7 +169,7 @@ b32 bob_platform_run_command(String command_line, Arena *arena, Bob_Platform_Pro
 		(options.working_directory.data &&
 			!string_is_terminated(options.working_directory)) || !arena || !result) return false;
 	mark = arena_mark(arena);
-	*result = (Bob_Platform_Process_Result){ .exit_code = UINT32_MAX };
+	*result = (Manny_Platform_Process_Result){ .exit_code = UINT32_MAX };
 	start = platform_start_process(command_line.data, (Platform_Process_Options){
 		.working_directory = options.working_directory.data,
 		.capture_standard_output = true,
@@ -208,7 +208,7 @@ failure:
 	return false;
 }
 
-b32 bob_platform_error_message(u32 error_code, Arena *arena, String *result)
+b32 manny_platform_error_message(u32 error_code, Arena *arena, String *result)
 {
 	if (!error_code || !arena || !result) return false;
 	Platform_String_Result query = platform_error_message(error_code, NULL, 0);
@@ -226,30 +226,30 @@ b32 bob_platform_error_message(u32 error_code, Arena *arena, String *result)
 	return true;
 }
 
-static Platform_Mutex bob_output_mutex;
-static b32 bob_output_mutex_initialized;
+static Platform_Mutex manny_output_mutex;
+static b32 manny_output_mutex_initialized;
 
-void bob_platform_enable_console_colors(void)
+void manny_platform_enable_console_colors(void)
 {
-	if (!bob_output_mutex_initialized) {
-		platform_init_mutex(&bob_output_mutex);
-		bob_output_mutex_initialized = true;
+	if (!manny_output_mutex_initialized) {
+		platform_init_mutex(&manny_output_mutex);
+		manny_output_mutex_initialized = true;
 	}
 	platform_enable_console_colors(PLATFORM_STANDARD_OUTPUT);
 	platform_enable_console_colors(PLATFORM_STANDARD_ERROR);
 }
 
-b32 bob_platform_console_supports_colors(b32 error_stream)
+b32 manny_platform_console_supports_colors(b32 error_stream)
 {
 	return platform_console_supports_colors(error_stream ? PLATFORM_STANDARD_ERROR : PLATFORM_STANDARD_OUTPUT);
 }
 
-void bob_platform_output_lock(void)
+void manny_platform_output_lock(void)
 {
-	platform_lock_mutex(&bob_output_mutex);
+	platform_lock_mutex(&manny_output_mutex);
 }
 
-void bob_platform_output_unlock(void)
+void manny_platform_output_unlock(void)
 {
-	platform_unlock_mutex(&bob_output_mutex);
+	platform_unlock_mutex(&manny_output_mutex);
 }

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Manny build system.">
+	<title>Manny</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="style.css">
+</head>
+<body>
+	<nav class="utilities" aria-label="Project links">
+		<a href="https://github.com/MicroRJ/Manny" aria-label="GitHub" title="GitHub">
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				<path d="M12 2C6.48 2 2 6.58 2 12.23c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49v-1.91c-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.63.07-.62.07-.62 1 .08 1.53 1.06 1.53 1.06.9 1.56 2.35 1.11 2.92.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.35 9.35 0 0 1 12 6.96a9.3 9.3 0 0 1 2.5.34c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.04.36.32.68.94.68 1.89v2.81c0 .27.18.59.69.49A10.23 10.23 0 0 0 22 12.23C22 6.58 17.52 2 12 2Z" />
+			</svg>
+		</a>
+	</nav>
+
+	<main>
+		<section class="hero" id="home">
+			<h1>MANNY</h1>
+			<a class="next" href="#build">docs <span aria-hidden="true">&#8595;</span></a>
+		</section>
+
+		<section class="build" id="build">
+			<div class="build-content">
+				<div class="script">
+					<p class="filename">build.elf</p>
+					<pre><code><span class="name">compile</span> := {
+	name = <span class="string">"compile main"</span>,
+	command_line = <span class="string">"clang-cl /c main.c /Fobuild\\main.obj"</span>,
+	inputs = { <span class="string">"main.c"</span> },
+	outputs = { <span class="string">"build/main.obj"</span> },
+}
+
+<span class="name">link</span> := {
+	name = <span class="string">"link hello"</span>,
+	command_line = <span class="string">"clang-cl build\\main.obj /Febuild\\hello.exe"</span>,
+	inputs = { <span class="string">"build/main.obj"</span> },
+	outputs = { <span class="string">"build/hello.exe"</span> },
+	dependencies = { compile },
+}
+
+entries.build = <span class="keyword">fun</span>() {
+	<span class="keyword">ret</span> manny.build({ targets = { link } })
+}</code></pre>
+				</div>
+
+				<div class="output">
+					<p class="filename">manny</p>
+					<pre><code><span class="muted">&gt;</span> manny<span class="cursor" aria-hidden="true"></span>
+
+<span class="muted">[1/2 succeeded]</span> compile main
+<span class="muted">[2/2 succeeded]</span> link hello</code></pre>
+				</div>
+			</div>
+		</section>
+
+		<section class="docs" id="docs">
+			<h2>DOCUMENTATION</h2>
+			<nav class="docs-index" aria-label="Documentation">
+				<a href="https://github.com/MicroRJ/Manny#getting-started"><strong>Getting started</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny#a-build"><strong>Build scripts</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny#the-model"><strong>Tasks and dependencies</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny#command-line"><strong>Command line</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><strong>C library</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny"><strong>Source</strong><i aria-hidden="true">&#8599;</i></a>
+			</nav>
+		</section>
+	</main>
+</body>
+</html>

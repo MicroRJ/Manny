@@ -4,7 +4,7 @@ static b32 environment_equals(const char *name, const char *expected)
 {
     Scratch scratch = begin_scratch();
     String value = {0};
-	b32 equal = bob_platform_get_environment(string_from_cstring(name), scratch.arena, &value) &&
+	b32 equal = manny_platform_get_environment(string_from_cstring(name), scratch.arena, &value) &&
         string_equal(value, string_from_cstring(expected));
     end_scratch(scratch);
     return equal;
@@ -13,26 +13,26 @@ static b32 environment_equals(const char *name, const char *expected)
 static b32 test_vcvars_cache_application(void)
 {
     static const char cache_text[] =
-        "BOB_VCVARS_CACHE_V1\n"
-        "prepend BOB_VCVARS_TEST_PREPEND=tool;\n"
-        "append BOB_VCVARS_TEST_APPEND=;tail\n"
-        "set BOB_VCVARS_TEST_SET=value\n";
+        "MANNY_VCVARS_CACHE_V1\n"
+        "prepend MANNY_VCVARS_TEST_PREPEND=tool;\n"
+        "append MANNY_VCVARS_TEST_APPEND=;tail\n"
+        "set MANNY_VCVARS_TEST_SET=value\n";
     b32 result = false;
 
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_PREPEND"), LIT("base"));
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_APPEND"), LIT("base"));
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_SET"), (String){0});
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_PREPEND"), LIT("base"));
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_APPEND"), LIT("base"));
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_SET"), (String){0});
 
     if (!vcvars_cache_apply(string_from_cstring(cache_text))) goto cleanup;
-    if (!environment_equals("BOB_VCVARS_TEST_PREPEND", "tool;base")) goto cleanup;
-    if (!environment_equals("BOB_VCVARS_TEST_APPEND", "base;tail")) goto cleanup;
-    if (!environment_equals("BOB_VCVARS_TEST_SET", "value")) goto cleanup;
+    if (!environment_equals("MANNY_VCVARS_TEST_PREPEND", "tool;base")) goto cleanup;
+    if (!environment_equals("MANNY_VCVARS_TEST_APPEND", "base;tail")) goto cleanup;
+    if (!environment_equals("MANNY_VCVARS_TEST_SET", "value")) goto cleanup;
     result = true;
 
 cleanup:
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_PREPEND"), (String){0});
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_APPEND"), (String){0});
-	bob_platform_set_environment(LIT("BOB_VCVARS_TEST_SET"), (String){0});
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_PREPEND"), (String){0});
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_APPEND"), (String){0});
+	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_SET"), (String){0});
     return result;
 }
 
@@ -75,45 +75,45 @@ static b32 test_blake3(void)
 
 static b32 test_build_paths(void)
 {
-	Bob_Build *build = bob_build_create();
-	Bob_Build *rooted;
-	Bob *graph;
-	Bob_Execution *execution = NULL;
-	Bob_Path root;
-	Bob_Path first;
-	Bob_Path second;
-	Bob_Path absolute;
-	Bob_Path expected_root;
+	Manny_Build *build = manny_build_create();
+	Manny_Build *rooted;
+	Manny *graph;
+	Manny_Execution *execution = NULL;
+	Manny_Path root;
+	Manny_Path first;
+	Manny_Path second;
+	Manny_Path absolute;
+	Manny_Path expected_root;
 	String root_string;
 	String first_string;
 	CHECK(build != NULL);
-	graph = bob_build_graph(build);
+	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
 
-	root = bob_build_root(build);
-	root_string = bob_path_string(build, root);
-	CHECK(bob_path_is_valid(root));
+	root = manny_build_root(build);
+	root_string = manny_path_string(build, root);
+	CHECK(manny_path_is_valid(root));
 	CHECK(root_string.size >= 3 && root_string.data[1] == ':');
 	CHECK(root_string.data[0] >= 'A' && root_string.data[0] <= 'Z');
 	CHECK(memchr(root_string.data, '\\', (size_t)root_string.size) == NULL);
-	CHECK(bob_path_resolve(build, root, LIT("build\\path-test\\temporary\\..\\file.obj"), &first));
-	CHECK(bob_path_resolve(build, root, LIT(".\\build/path-test/file.obj"), &second));
+	CHECK(manny_path_resolve(build, root, LIT("build\\path-test\\temporary\\..\\file.obj"), &first));
+	CHECK(manny_path_resolve(build, root, LIT(".\\build/path-test/file.obj"), &second));
 	CHECK(first.atom.id == second.atom.id);
-	first_string = bob_path_string(build, first);
+	first_string = manny_path_string(build, first);
 	CHECK(memchr(first_string.data, '\\', (size_t)first_string.size) == NULL);
-	CHECK(bob_path_resolve(build, root, first_string, &absolute));
+	CHECK(manny_path_resolve(build, root, first_string, &absolute));
 	CHECK(absolute.atom.id == first.atom.id);
-	CHECK(!bob_path_resolve(build, root, LIT(""), &absolute));
-	CHECK(bob_path_resolve(build, root, LIT("build"), &expected_root));
-	rooted = bob_build_create_at(LIT("build"));
+	CHECK(!manny_path_resolve(build, root, LIT(""), &absolute));
+	CHECK(manny_path_resolve(build, root, LIT("build"), &expected_root));
+	rooted = manny_build_create_at(LIT("build"));
 	CHECK(rooted != NULL);
-	CHECK(string_equal(bob_path_string(rooted, bob_build_root(rooted)), bob_path_string(build, expected_root)));
-	bob_build_destroy(rooted);
+	CHECK(string_equal(manny_path_string(rooted, manny_build_root(rooted)), manny_path_string(build, expected_root)));
+	manny_build_destroy(rooted);
 
-	CHECK_OK(bob_execution_create(graph, &execution));
-	CHECK(bob_path_resolve(build, root, LIT("discovered after prepare"), &absolute));
-	bob_execution_destroy(execution);
-	bob_build_destroy(build);
+	CHECK_OK(manny_execution_create(graph, &execution));
+	CHECK(manny_path_resolve(build, root, LIT("discovered after prepare"), &absolute));
+	manny_execution_destroy(execution);
+	manny_build_destroy(build);
 	return true;
 }
 
@@ -278,13 +278,13 @@ cleanup:
 
 int main(void)
 {
-	static const Bob_Test tests[] = {
-		BOB_TEST(test_arena_and_strings),
-		BOB_TEST(test_thread_local_scratch),
-		BOB_TEST(test_vcvars_cache_application),
-		BOB_TEST(test_high_resolution_timer),
-		BOB_TEST(test_blake3),
-		BOB_TEST(test_build_paths),
+	static const Manny_Test tests[] = {
+		MANNY_TEST(test_arena_and_strings),
+		MANNY_TEST(test_thread_local_scratch),
+		MANNY_TEST(test_vcvars_cache_application),
+		MANNY_TEST(test_high_resolution_timer),
+		MANNY_TEST(test_blake3),
+		MANNY_TEST(test_build_paths),
 	};
 	return test_run_suite("base", tests, ARRAY_COUNT(tests));
 }

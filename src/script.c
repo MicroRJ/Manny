@@ -62,7 +62,7 @@ Script *script_load(Arena *arena, String path)
 	}
 	// TODO(RJ): just let caller give us the source directly!
 	String source;
-	if (!bob_platform_read_entire_file(script->arena, path, &source)) {
+	if (!manny_platform_read_entire_file(script->arena, path, &source)) {
 		log_error("unable to read '%s'", path.data);
 		script_destroy(script);
 		return NULL;

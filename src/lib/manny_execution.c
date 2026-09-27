@@ -1,24 +1,24 @@
-#include "bob_internal.h"
+#include "manny_internal.h"
 #include "logger.h"
 #include "platform.h"
 #include "profiler.h"
 
-typedef struct Bob_Execution_Node
+typedef struct Manny_Execution_Node
 {
 	u32             unfinished_dependencies;
-	Bob_Node_Result result;
-	Bob_Node_Status state;
+	Manny_Node_Result result;
+	Manny_Node_Status state;
 }
-Bob_Execution_Node;
+Manny_Execution_Node;
 
-struct Bob_Execution
+struct Manny_Execution
 {
 	Arena               arena;
-	Bob                *bob;
-	Bob_Execution_Node *nodes;
+	Manny                *manny;
+	Manny_Execution_Node *nodes;
 
 	// TODO(RJ): this is scoped to the execution function, but we keep here for tests
-	Bob_Node           **ready;
+	Manny_Node           **ready;
 	u32                  ready_count;
 	u32                  ready_head;
 
@@ -30,202 +30,202 @@ struct Bob_Execution
 	b32                  manually_driven;
 };
 
-static Bob_Execution_Node *execution_node(Bob_Execution *execution, const Bob_Node *node)
+static Manny_Execution_Node *execution_node(Manny_Execution *execution, const Manny_Node *node)
 {
-	if (!execution || !bob_valid_node(execution->bob, node)) return NULL;
+	if (!execution || !manny_valid_node(execution->manny, node)) return NULL;
 	return execution->nodes + node->index;
 }
 
-static const Bob_Execution_Node *execution_node_const(const Bob_Execution *execution, const Bob_Node *node)
+static const Manny_Execution_Node *execution_node_const(const Manny_Execution *execution, const Manny_Node *node)
 {
-	if (!execution || !bob_valid_node(execution->bob, node)) return NULL;
+	if (!execution || !manny_valid_node(execution->manny, node)) return NULL;
 	return execution->nodes + node->index;
 }
 
-static void enqueue_ready(Bob_Execution *execution, Bob_Node *node)
+static void enqueue_ready(Manny_Execution *execution, Manny_Node *node)
 {
 	execution->ready[execution->ready_count++] = node;
-	execution->nodes[node->index].state = BOB_NODE_READY;
+	execution->nodes[node->index].state = MANNY_NODE_READY;
 }
 
-Bob_Error bob_execution_create(Bob *bob, Bob_Execution **execution_out)
+Manny_Error manny_execution_create(Manny *manny, Manny_Execution **execution_out)
 {
 	Arena arena;
-	Bob_Execution *execution;
+	Manny_Execution *execution;
 	u32 visited = 0;
-	if (!bob || !execution_out) return BOB_ERROR_INVALID_NODE;
+	if (!manny || !execution_out) return MANNY_ERROR_INVALID_NODE;
 	*execution_out = NULL;
 	arena = arena_create(0);
-	if (!arena.data) return BOB_ERROR_OUT_OF_MEMORY;
-	arena_set_name(&arena, "Bob execution");
-	execution = arena_push_zero_aligned(&arena, sizeof(*execution), _Alignof(Bob_Execution));
+	if (!arena.data) return MANNY_ERROR_OUT_OF_MEMORY;
+	arena_set_name(&arena, "Manny execution");
+	execution = arena_push_zero_aligned(&arena, sizeof(*execution), _Alignof(Manny_Execution));
 	if (!execution) goto out_of_memory;
 	execution->arena = arena;
-	execution->bob = bob;
-	if (bob->node_count) {
-		execution->nodes = arena_push_zero_aligned(&execution->arena, (u64)bob->node_count * sizeof(*execution->nodes), _Alignof(Bob_Execution_Node));
-		execution->ready = arena_push_zero_aligned(&execution->arena, (u64)bob->node_count * sizeof(*execution->ready), _Alignof(Bob_Node *));
+	execution->manny = manny;
+	if (manny->node_count) {
+		execution->nodes = arena_push_zero_aligned(&execution->arena, (u64)manny->node_count * sizeof(*execution->nodes), _Alignof(Manny_Execution_Node));
+		execution->ready = arena_push_zero_aligned(&execution->arena, (u64)manny->node_count * sizeof(*execution->ready), _Alignof(Manny_Node *));
 		if (!execution->nodes || !execution->ready) goto out_of_memory;
 	}
 
-	for (u32 i = 0; i < bob->node_count; ++i) {
-		execution->nodes[i].unfinished_dependencies = bob->nodes[i]->dependencies.count;
-		if (execution->nodes[i].unfinished_dependencies == 0) execution->ready[execution->ready_count++] = bob->nodes[i];
+	for (u32 i = 0; i < manny->node_count; ++i) {
+		execution->nodes[i].unfinished_dependencies = manny->nodes[i]->dependencies.count;
+		if (execution->nodes[i].unfinished_dependencies == 0) execution->ready[execution->ready_count++] = manny->nodes[i];
 	}
 	while (visited < execution->ready_count) {
-		Bob_Node *node = execution->ready[visited++];
+		Manny_Node *node = execution->ready[visited++];
 		for (u32 i = 0; i < node->dependents.count; ++i) {
-			Bob_Node *dependent = node->dependents.items[i];
-			Bob_Execution_Node *dependent_state = execution->nodes + dependent->index;
+			Manny_Node *dependent = node->dependents.items[i];
+			Manny_Execution_Node *dependent_state = execution->nodes + dependent->index;
 			--dependent_state->unfinished_dependencies;
 			if (dependent_state->unfinished_dependencies == 0) execution->ready[execution->ready_count++] = dependent;
 		}
 	}
-	if (visited != bob->node_count) {
+	if (visited != manny->node_count) {
 		arena = execution->arena;
 		arena_destroy(&arena);
-		return BOB_ERROR_CYCLE;
+		return MANNY_ERROR_CYCLE;
 	}
 
 	execution->ready_count = 0;
-	for (u32 i = 0; i < bob->node_count; ++i) {
-		Bob_Node *node = bob->nodes[i];
-		execution->nodes[i] = (Bob_Execution_Node){ .unfinished_dependencies = node->dependencies.count };
+	for (u32 i = 0; i < manny->node_count; ++i) {
+		Manny_Node *node = manny->nodes[i];
+		execution->nodes[i] = (Manny_Execution_Node){ .unfinished_dependencies = node->dependencies.count };
 		if (node->dependencies.count == 0) enqueue_ready(execution, node);
 	}
-	bob->sealed = true;
-	++bob->execution_count;
+	manny->sealed = true;
+	++manny->execution_count;
 	*execution_out = execution;
-	return BOB_OK;
+	return MANNY_OK;
 
 out_of_memory:
 	arena_destroy(&arena);
-	return BOB_ERROR_OUT_OF_MEMORY;
+	return MANNY_ERROR_OUT_OF_MEMORY;
 }
 
-void bob_execution_destroy(Bob_Execution *execution)
+void manny_execution_destroy(Manny_Execution *execution)
 {
 	Arena arena;
 	if (!execution) return;
 	for (u32 i = 0; i < execution->output_arena_count; ++i) arena_destroy(execution->output_arenas + i);
-	ASSERT(execution->bob);
-	ASSERT(execution->bob->execution_count > 0);
-	--execution->bob->execution_count;
+	ASSERT(execution->manny);
+	ASSERT(execution->manny->execution_count > 0);
+	--execution->manny->execution_count;
 	arena = execution->arena;
 	arena_destroy(&arena);
 }
 
-static b32 take_ready(Bob_Execution *execution, Bob_Node **node_out)
+static b32 take_ready(Manny_Execution *execution, Manny_Node **node_out)
 {
-	Bob_Node *node;
+	Manny_Node *node;
 	if (!execution || !node_out || execution->ready_head == execution->ready_count) return false;
 	node = execution->ready[execution->ready_head++];
-	execution->nodes[node->index].state = BOB_NODE_RUNNING;
+	execution->nodes[node->index].state = MANNY_NODE_RUNNING;
 	*node_out = node;
 	return true;
 }
 
-b32 bob_execution_take_ready(Bob_Execution *execution, Bob_Node **node_out)
+b32 manny_execution_take_ready(Manny_Execution *execution, Manny_Node **node_out)
 {
 	if (!execution || execution->automatically_driven) return false;
 	execution->manually_driven = true;
 	return take_ready(execution, node_out);
 }
 
-static void block_node_and_dependents(Bob_Execution *execution, Bob_Node *node)
+static void block_node_and_dependents(Manny_Execution *execution, Manny_Node *node)
 {
-	Bob_Execution_Node *state = execution->nodes + node->index;
-	if (state->state == BOB_NODE_BLOCKED || state->state == BOB_NODE_SUCCEEDED || state->state == BOB_NODE_FAILED) return;
-	state->state = BOB_NODE_BLOCKED;
-	state->result = (Bob_Node_Result){0};
+	Manny_Execution_Node *state = execution->nodes + node->index;
+	if (state->state == MANNY_NODE_BLOCKED || state->state == MANNY_NODE_SUCCEEDED || state->state == MANNY_NODE_FAILED) return;
+	state->state = MANNY_NODE_BLOCKED;
+	state->result = (Manny_Node_Result){0};
 	++execution->terminal_count;
 	for (u32 i = 0; i < node->dependents.count; ++i) block_node_and_dependents(execution, node->dependents.items[i]);
 }
 
-static Bob_Error complete_result(Bob_Execution *execution, Bob_Node *node, Bob_Node_Result result)
+static Manny_Error complete_result(Manny_Execution *execution, Manny_Node *node, Manny_Node_Result result)
 {
-	Bob_Execution_Node *state = execution_node(execution, node);
-	if (!state) return BOB_ERROR_INVALID_NODE;
-	if (state->state != BOB_NODE_RUNNING) return BOB_ERROR_INVALID_STATE;
+	Manny_Execution_Node *state = execution_node(execution, node);
+	if (!state) return MANNY_ERROR_INVALID_NODE;
+	if (state->state != MANNY_NODE_RUNNING) return MANNY_ERROR_INVALID_STATE;
 	state->result = result;
-	state->state = result.succeeded ? BOB_NODE_SUCCEEDED : BOB_NODE_FAILED;
+	state->state = result.succeeded ? MANNY_NODE_SUCCEEDED : MANNY_NODE_FAILED;
 	++execution->terminal_count;
 	if (!result.succeeded) {
 		execution->failed = true;
 		for (u32 i = 0; i < node->dependents.count; ++i) block_node_and_dependents(execution, node->dependents.items[i]);
-		return BOB_OK;
+		return MANNY_OK;
 	}
 	for (u32 i = 0; i < node->dependents.count; ++i) {
-		Bob_Node *dependent = node->dependents.items[i];
-		Bob_Execution_Node *dependent_state = execution->nodes + dependent->index;
-		if (dependent_state->state != BOB_NODE_PENDING) continue;
+		Manny_Node *dependent = node->dependents.items[i];
+		Manny_Execution_Node *dependent_state = execution->nodes + dependent->index;
+		if (dependent_state->state != MANNY_NODE_PENDING) continue;
 		--dependent_state->unfinished_dependencies;
 		if (dependent_state->unfinished_dependencies == 0) enqueue_ready(execution, dependent);
 	}
-	return BOB_OK;
+	return MANNY_OK;
 }
 
-Bob_Error bob_execution_complete_result(Bob_Execution *execution, Bob_Node *node, Bob_Node_Result result)
+Manny_Error manny_execution_complete_result(Manny_Execution *execution, Manny_Node *node, Manny_Node_Result result)
 {
-	if (!execution) return BOB_ERROR_INVALID_NODE;
-	if (execution->automatically_driven) return BOB_ERROR_INVALID_STATE;
+	if (!execution) return MANNY_ERROR_INVALID_NODE;
+	if (execution->automatically_driven) return MANNY_ERROR_INVALID_STATE;
 	execution->manually_driven = true;
 	return complete_result(execution, node, result);
 }
 
-Bob_Error bob_execution_complete(Bob_Execution *execution, Bob_Node *node, b32 succeeded)
+Manny_Error manny_execution_complete(Manny_Execution *execution, Manny_Node *node, b32 succeeded)
 {
-	return bob_execution_complete_result(execution, node, (Bob_Node_Result){
+	return manny_execution_complete_result(execution, node, (Manny_Node_Result){
 		.succeeded = succeeded,
 		.changed = succeeded,
 	});
 }
 
-b32 bob_execution_is_finished(const Bob_Execution *execution)
+b32 manny_execution_is_finished(const Manny_Execution *execution)
 {
 	ASSERT(execution);
-	return execution->terminal_count == execution->bob->node_count;
+	return execution->terminal_count == execution->manny->node_count;
 }
 
-b32 bob_execution_has_failed(const Bob_Execution *execution)
+b32 manny_execution_has_failed(const Manny_Execution *execution)
 {
 	ASSERT(execution);
 	return execution->failed;
 }
 
-Bob_Node_Status bob_execution_node_state(const Bob_Execution *execution, const Bob_Node *node)
+Manny_Node_Status manny_execution_node_state(const Manny_Execution *execution, const Manny_Node *node)
 {
-	const Bob_Execution_Node *state = execution_node_const(execution, node);
-	return state ? state->state : BOB_NODE_PENDING;
+	const Manny_Execution_Node *state = execution_node_const(execution, node);
+	return state ? state->state : MANNY_NODE_PENDING;
 }
 
-Bob_Node_Result bob_execution_node_result(const Bob_Execution *execution, const Bob_Node *node)
+Manny_Node_Result manny_execution_node_result(const Manny_Execution *execution, const Manny_Node *node)
 {
-	const Bob_Execution_Node *state = execution_node_const(execution, node);
-	return state ? state->result : (Bob_Node_Result){0};
+	const Manny_Execution_Node *state = execution_node_const(execution, node);
+	return state ? state->result : (Manny_Node_Result){0};
 }
 
-typedef struct Bob_Executor Bob_Executor;
+typedef struct Manny_Executor Manny_Executor;
 
-typedef struct Bob_Worker
+typedef struct Manny_Worker
 {
-	Bob_Executor   *executor;
+	Manny_Executor   *executor;
 	Platform_Thread thread;
 	Arena          *output;
 }
-Bob_Worker;
+Manny_Worker;
 
-struct Bob_Executor
+struct Manny_Executor
 {
-	Bob_Execution        *execution;
-	Bob_Exec_Params       options;
-	Bob_Worker           *workers;
+	Manny_Execution        *execution;
+	Manny_Exec_Params       options;
+	Manny_Worker           *workers;
 	u32                   worker_count;
 	u32                   thread_count;
 	u32                   running;
-	Bob_Node            **work;
+	Manny_Node            **work;
 	u32                   work_count;
-	Bob_Event            *events;
+	Manny_Event            *events;
 	u32                   event_capacity;
 	u32                   event_head;
 	u32                   event_count;
@@ -235,14 +235,14 @@ struct Bob_Executor
 	b32                   stopping;
 };
 
-static void request_stop_locked(Bob_Executor *executor)
+static void request_stop_locked(Manny_Executor *executor)
 {
 	executor->stopping = true;
 	platform_broadcast_condition(&executor->work_available);
 	platform_broadcast_condition(&executor->event_available);
 }
 
-static b32 enqueue_event_locked(Bob_Executor *executor, Bob_Event event)
+static b32 enqueue_event_locked(Manny_Executor *executor, Manny_Event event)
 {
 	if (executor->event_count == executor->event_capacity) return false;
 	u32 index = (executor->event_head + executor->event_count) % executor->event_capacity;
@@ -252,7 +252,7 @@ static b32 enqueue_event_locked(Bob_Executor *executor, Bob_Event event)
 	return true;
 }
 
-static b32 dequeue_event_locked(Bob_Executor *executor, Bob_Event *event)
+static b32 dequeue_event_locked(Manny_Executor *executor, Manny_Event *event)
 {
 	if (executor->event_count == 0) return false;
 	*event = executor->events[executor->event_head];
@@ -263,12 +263,12 @@ static b32 dequeue_event_locked(Bob_Executor *executor, Bob_Event *event)
 
 static u32 worker_main(void *data)
 {
-	Bob_Worker *worker = data;
-	Bob_Executor *executor = worker->executor;
+	Manny_Worker *worker = data;
+	Manny_Executor *executor = worker->executor;
 	for (;;) {
-		Bob_Node *node;
-		Bob_Event completion;
-		Bob_Node_Context context;
+		Manny_Node *node;
+		Manny_Event completion;
+		Manny_Node_Context context;
 
 		platform_lock_mutex(&executor->mutex);
 		while (!executor->stopping && executor->work_count == 0) {
@@ -283,7 +283,7 @@ static u32 worker_main(void *data)
 		}
 
 		node = executor->work[--executor->work_count];
-		if (!enqueue_event_locked(executor, (Bob_Event){ .type = BOB_EVENT_STARTED, .node = node })) {
+		if (!enqueue_event_locked(executor, (Manny_Event){ .type = MANNY_EVENT_STARTED, .node = node })) {
 			log_fatal("executor event queue exhausted");
 			request_stop_locked(executor);
 			platform_unlock_mutex(&executor->mutex);
@@ -291,10 +291,10 @@ static u32 worker_main(void *data)
 		}
 		platform_unlock_mutex(&executor->mutex);
 
-		completion = (Bob_Event){ .type = BOB_EVENT_COMPLETED, .node = node };
-		context = (Bob_Node_Context){
+		completion = (Manny_Event){ .type = MANNY_EVENT_COMPLETED, .node = node };
+		context = (Manny_Node_Context){
 			.execution = executor->execution,
-			.bob = executor->execution->bob,
+			.manny = executor->execution->manny,
 			.node = node,
 			.arena = worker->output,
 			.execution_data = executor->options.user_data,
@@ -317,10 +317,10 @@ static u32 worker_main(void *data)
 	return 0;
 }
 
-static void dispatch_ready(Bob_Executor *executor)
+static void dispatch_ready(Manny_Executor *executor)
 {
 	u32 previous_work_count;
-	Bob_Node *node;
+	Manny_Node *node;
 	platform_lock_mutex(&executor->mutex);
 	previous_work_count = executor->work_count;
 	while (executor->running < executor->worker_count && take_ready(executor->execution, &node)) {
@@ -333,42 +333,42 @@ static void dispatch_ready(Bob_Executor *executor)
 
 // TODO(RJ): we could split this into three functions:
 //
-// bob_execution_begin()
-// while (bob_execution_event(& event)) {}
-// bob_execution_end()
+// manny_execution_begin()
+// while (manny_execution_event(& event)) {}
+// manny_execution_end()
 //
 // Potentially one that does all 3 things, the point is, it would get of the callback!
 //
-b32 bob_execute(Bob_Execution *execution, Bob_Exec_Params options)
+b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 {
-	Bob_Executor executor = { .execution = execution, .options = options };
+	Manny_Executor executor = { .execution = execution, .options = options };
 	Scratch scratch;
 	b32 internal_error = false;
 	b32 synchronization_initialized = false;
 	u32 node_count;
 	if (!execution || execution->automatically_driven || execution->manually_driven || options.worker_count == 0) return false;
 	execution->automatically_driven = true;
-	node_count = execution->bob->node_count;
+	node_count = execution->manny->node_count;
 	for (u32 i = 0; i < node_count; ++i) {
-		Bob_Node *node = execution->bob->nodes[i];
+		Manny_Node *node = execution->manny->nodes[i];
 		if (!node->function) {
-			log_error("node has no action: %s", bob_node_name(node));
+			log_error("node has no action: %s", manny_node_name(node));
 			return false;
 		}
 	}
-	if (bob_execution_is_finished(execution)) return true;
+	if (manny_execution_is_finished(execution)) return true;
 	if (options.worker_count > node_count) options.worker_count = node_count;
 	executor.options = options;
 	executor.worker_count = options.worker_count;
 	scratch = begin_scratch();
-	executor.workers = arena_push_zero_aligned(scratch.arena, executor.worker_count * sizeof(*executor.workers), _Alignof(Bob_Worker));
-	executor.work = arena_push_zero_aligned(scratch.arena, executor.worker_count * sizeof(*executor.work), _Alignof(Bob_Node *));
+	executor.workers = arena_push_zero_aligned(scratch.arena, executor.worker_count * sizeof(*executor.workers), _Alignof(Manny_Worker));
+	executor.work = arena_push_zero_aligned(scratch.arena, executor.worker_count * sizeof(*executor.work), _Alignof(Manny_Node *));
 	if (executor.worker_count > UINT32_MAX / 2) {
 		internal_error = true;
 		goto cleanup;
 	}
 	executor.event_capacity = executor.worker_count * 2;
-	executor.events = arena_push_zero_aligned(scratch.arena, executor.event_capacity * sizeof(*executor.events), _Alignof(Bob_Event));
+	executor.events = arena_push_zero_aligned(scratch.arena, executor.event_capacity * sizeof(*executor.events), _Alignof(Manny_Event));
 	execution->output_arenas = arena_push_zero_aligned(&execution->arena, executor.worker_count * sizeof(*execution->output_arenas), _Alignof(Arena));
 	internal_error = !executor.workers || !executor.work || !executor.events || !execution->output_arenas;
 	if (internal_error) goto cleanup;
@@ -378,7 +378,7 @@ b32 bob_execute(Bob_Execution *execution, Bob_Exec_Params options)
 	platform_init_condition(&executor.event_available);
 	synchronization_initialized = true;
 	for (u32 i = 0; i < executor.worker_count; ++i) {
-		Bob_Worker *worker = executor.workers + i;
+		Manny_Worker *worker = executor.workers + i;
 		worker->executor = &executor;
 		worker->output = execution->output_arenas + i;
 		*worker->output = arena_create(MEGABYTES(256));
@@ -393,11 +393,11 @@ b32 bob_execute(Bob_Execution *execution, Bob_Exec_Params options)
 		++executor.thread_count;
 	}
 
-	while (!internal_error && !bob_execution_is_finished(execution)) {
-		Bob_Event event = {0};
+	while (!internal_error && !manny_execution_is_finished(execution)) {
+		Manny_Event event = {0};
 		b32 has_event = false;
 		dispatch_ready(&executor);
-		if (bob_execution_is_finished(execution)) break;
+		if (manny_execution_is_finished(execution)) break;
 		if (executor.running == 0) {
 			internal_error = true;
 			break;
@@ -415,12 +415,12 @@ b32 bob_execute(Bob_Execution *execution, Bob_Exec_Params options)
 			internal_error = true;
 			break;
 		}
-		if (event.type == BOB_EVENT_COMPLETED) {
-			if (complete_result(execution, event.node, event.result) != BOB_OK) internal_error = true;
+		if (event.type == MANNY_EVENT_COMPLETED) {
+			if (complete_result(execution, event.node, event.result) != MANNY_OK) internal_error = true;
 			--executor.running;
 			if (!internal_error) dispatch_ready(&executor);
 		}
-		else if (event.type != BOB_EVENT_STARTED) internal_error = true;
+		else if (event.type != MANNY_EVENT_STARTED) internal_error = true;
 		if (executor.options.event) executor.options.event(event, executor.options.user_data);
 	}
 
@@ -440,5 +440,5 @@ cleanup:
 		platform_destroy_mutex(&executor.mutex);
 	}
 	end_scratch(scratch);
-	return !internal_error && !bob_execution_has_failed(execution);
+	return !internal_error && !manny_execution_has_failed(execution);
 }

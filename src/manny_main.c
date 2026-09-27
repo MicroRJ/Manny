@@ -1,5 +1,5 @@
 
-#include "bob_build.h"
+#include "manny_build.h"
 #include "logger.h"
 #include "platform_adapter.h"
 #include "profiler.h"
@@ -26,7 +26,7 @@ static int run_build(Script *script, Cmd_Options command_line_options)
 
    {
       Profile_Scope scope = profile_scope_begin("builder");
-      exit_code = bob_build(build.build, (Bob_Build_Params){
+      exit_code = manny_build(build.build, (Manny_Build_Params){
 			.worker_count = options.worker_count,
 			.explain = command_line_options.explain,
 		}) ? 0 : 1;
@@ -34,18 +34,18 @@ static int run_build(Script *script, Cmd_Options command_line_options)
    }
 
    cleanup:
-   bob_build_destroy(build.build);
+   manny_build_destroy(build.build);
    return exit_code;
 }
 
 static int run_script(String path, String function_name, Cmd_Options command_line_options)
 {
-	Bob_Platform_File_Info build_file;
-	if (!bob_platform_file_info(path, &build_file))
+	Manny_Platform_File_Info build_file;
+	if (!manny_platform_file_info(path, &build_file))
 	{
 		Scratch scratch = begin_scratch();
 		String working_directory;
-		if (bob_platform_current_directory(scratch.arena, &working_directory)) log_error("%s: file not found (working directory: %s)", path.data, working_directory.data);
+		if (manny_platform_current_directory(scratch.arena, &working_directory)) log_error("%s: file not found (working directory: %s)", path.data, working_directory.data);
 		else log_error("%s: file not found", path.data);
 		end_scratch(scratch);
 		return 1;
@@ -165,7 +165,7 @@ int main(int argument_count, char **arguments)
       }
       else if (strcmp(arguments[argument_index], "--version") == 0)
       {
-         printf("bob %s\n", BOB_VERSION);
+         printf("manny %s\n", MANNY_VERSION);
 			printf("elf %s\n", elf_version());
          return 0;
       }
@@ -191,7 +191,7 @@ int main(int argument_count, char **arguments)
       }
       else
       {
-         log_error("usage: bob [build-file] [function] [-q | --quiet] [--explain] [--verbose [N]] [--workers N] [--profile | --profile-threads]\n" "       bob --cache-vcvars\n" "       bob --version");
+         log_error("usage: manny [build-file] [function] [-q | --quiet] [--explain] [--verbose [N]] [--workers N] [--profile | --profile-threads]\n" "       manny --cache-vcvars\n" "       manny --version");
          return 2;
       }
    }

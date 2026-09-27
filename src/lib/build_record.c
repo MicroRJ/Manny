@@ -18,9 +18,9 @@ b32 build_record_reserve_tasks(Build_Record_Stream *stream, u32 needed)
 	return true;
 }
 
-u32 build_record_task_index(const Build_Record_Stream *stream, Bob_Path output)
+u32 build_record_task_index(const Build_Record_Stream *stream, Manny_Path output)
 {
-	if (!stream || !bob_path_is_valid(output)) return UINT32_MAX;
+	if (!stream || !manny_path_is_valid(output)) return UINT32_MAX;
 	for (u32 i = 0; i < stream->task_count; ++i) {
 		if (stream->tasks[i].output.atom.id == output.atom.id) return i;
 	}
@@ -29,17 +29,17 @@ u32 build_record_task_index(const Build_Record_Stream *stream, Bob_Path output)
 
 b32 build_record_set(Build_Record_Stream *stream, Build_Record_Task task)
 {
-	if (!stream || !stream->arena || !bob_path_is_valid(task.output)) return false;
+	if (!stream || !stream->arena || !manny_path_is_valid(task.output)) return false;
 	if (task.dependencies.count && !task.dependencies.items) return false;
 	for (u32 i = 0; i < task.dependencies.count; ++i) {
-		if (!bob_path_is_valid(task.dependencies.items[i])) return false;
+		if (!manny_path_is_valid(task.dependencies.items[i])) return false;
 	}
 	u32 existing = build_record_task_index(stream, task.output);
 	if (existing == UINT32_MAX && stream->task_count == UINT32_MAX) return false;
 	if (existing == UINT32_MAX && !build_record_reserve_tasks(stream, stream->task_count + 1)) return false;
 	if (task.dependencies.count) {
-		Bob_Path *dependencies = arena_push_copy_aligned(stream->arena,
-			(u64)task.dependencies.count * sizeof(*dependencies), _Alignof(Bob_Path), task.dependencies.items);
+		Manny_Path *dependencies = arena_push_copy_aligned(stream->arena,
+			(u64)task.dependencies.count * sizeof(*dependencies), _Alignof(Manny_Path), task.dependencies.items);
 		if (!dependencies) return false;
 		task.dependencies.items = dependencies;
 	}
@@ -48,7 +48,7 @@ b32 build_record_set(Build_Record_Stream *stream, Build_Record_Task task)
 	return true;
 }
 
-b32 build_record_remove(Build_Record_Stream *stream, Bob_Path output)
+b32 build_record_remove(Build_Record_Stream *stream, Manny_Path output)
 {
 	u32 index = build_record_task_index(stream, output);
 	if (index == UINT32_MAX) return false;
@@ -65,7 +65,7 @@ void build_record_replace_tasks(Build_Record_Stream *stream, const Build_Record_
 	stream->task_capacity = replacement->task_capacity;
 }
 
-b32 build_record_stream_init(Build_Record_Stream *stream, Arena *arena, Bob_Build *build)
+b32 build_record_stream_init(Build_Record_Stream *stream, Arena *arena, Manny_Build *build)
 {
 	if (!stream || !arena || !build) return false;
 	*stream = (Build_Record_Stream){ .arena = arena, .build = build, .initialized = true };
@@ -101,9 +101,9 @@ b32 build_record_stream_snapshot(const Build_Record_Stream *stream, Arena *arena
 	return snapshot->tasks != NULL;
 }
 
-b32 build_record_snapshot_get(const Build_Record_Snapshot *snapshot, Bob_Path output, Build_Record_Task *result)
+b32 build_record_snapshot_get(const Build_Record_Snapshot *snapshot, Manny_Path output, Build_Record_Task *result)
 {
-	if (!snapshot || !result || !bob_path_is_valid(output)) return false;
+	if (!snapshot || !result || !manny_path_is_valid(output)) return false;
 	for (u32 i = 0; i < snapshot->task_count; ++i) {
 		if (snapshot->tasks[i].output.atom.id != output.atom.id) continue;
 		*result = snapshot->tasks[i];

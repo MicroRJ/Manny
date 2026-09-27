@@ -1,15 +1,15 @@
 #ifndef BUILD_RECORD_STREAM_H
 #define BUILD_RECORD_STREAM_H
 
-#include "bob_build_internal.h"
+#include "manny_build_internal.h"
 
 typedef struct Build_Record_Task
 {
-	Bob_Path        output;
+	Manny_Path        output;
 	u64             output_stamp;
-	Bob_Fingerprint fingerprint;
+	Manny_Fingerprint fingerprint;
 	/* Dependency storage is immutable and remains valid for the stream lifetime. */
-	Bob_Path_Array  dependencies;
+	Manny_Path_Array  dependencies;
 }
 Build_Record_Task;
 
@@ -33,13 +33,13 @@ Build_Record_Result;
 typedef struct Build_Record_Stream
 {
 	Arena     *arena;
-	Bob_Build *build;
+	Manny_Build *build;
 
 	Build_Record_Task *tasks;
 	u32                task_count;
 	u32                task_capacity;
 
-	Bob_Path *paths;
+	Manny_Path *paths;
 	u32       path_count;
 	u32       path_capacity;
 	u32      *ids_by_atom;
@@ -48,15 +48,15 @@ typedef struct Build_Record_Stream
 }
 Build_Record_Stream;
 
-b32 build_record_stream_init(Build_Record_Stream *stream, Arena *arena, Bob_Build *build);
+b32 build_record_stream_init(Build_Record_Stream *stream, Arena *arena, Manny_Build *build);
 void build_record_stream_destroy(Build_Record_Stream *stream);
 void build_record_stream_clear(Build_Record_Stream *stream);
 
 b32 build_record_stream_snapshot(const Build_Record_Stream *stream, Arena *arena, Build_Record_Snapshot *snapshot);
-b32 build_record_snapshot_get(const Build_Record_Snapshot *snapshot, Bob_Path output, Build_Record_Task *result);
+b32 build_record_snapshot_get(const Build_Record_Snapshot *snapshot, Manny_Path output, Build_Record_Task *result);
 
 b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Build_Record_Task task);
-b32 build_record_stream_append_remove(Build_Record_Stream *stream, String path, Bob_Path output);
+b32 build_record_stream_append_remove(Build_Record_Stream *stream, String path, Manny_Path output);
 b32 build_record_stream_compact(Build_Record_Stream *stream, String path);
 Build_Record_Result build_record_stream_load(Build_Record_Stream *stream, String path);
 

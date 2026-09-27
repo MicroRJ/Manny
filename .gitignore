@@ -4,8 +4,9 @@ build/
 # Release packages
 dist/
 
-# Bob build state
+# Build state
 .bob/
+.manny/
 
 # Local tooling
 .codex-staging/

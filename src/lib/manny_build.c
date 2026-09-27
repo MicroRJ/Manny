@@ -1,4 +1,4 @@
-#include "bob_build_internal.h"
+#include "manny_build_internal.h"
 #include "build_record_stream.h"
 #include "compiler_command.h"
 #include "logger.h"
@@ -11,30 +11,30 @@
 #include <stdio.h>
 #include <string.h>
 
-#define BOB_BUILD_STATE_PATH ".bob/state"
+#define MANNY_BUILD_STATE_PATH ".manny/state"
 
-typedef enum Bob_Rebuild_Reason
+typedef enum Manny_Rebuild_Reason
 {
-	BOB_REBUILD_UP_TO_DATE,
-	BOB_REBUILD_NO_OUTPUTS,
-	BOB_REBUILD_OUTPUT_MISSING,
-	BOB_REBUILD_INPUT_MISSING,
-	BOB_REBUILD_STATE_MISSING,
-	BOB_REBUILD_STATE_CHANGED,
-	BOB_REBUILD_FINGERPRINT_CHANGED,
-	BOB_REBUILD_DEPENDENCY_MISSING,
-	BOB_REBUILD_DEPENDENCY_CHANGED,
-	BOB_REBUILD_INPUT_NEWER,
+	MANNY_REBUILD_UP_TO_DATE,
+	MANNY_REBUILD_NO_OUTPUTS,
+	MANNY_REBUILD_OUTPUT_MISSING,
+	MANNY_REBUILD_INPUT_MISSING,
+	MANNY_REBUILD_STATE_MISSING,
+	MANNY_REBUILD_STATE_CHANGED,
+	MANNY_REBUILD_FINGERPRINT_CHANGED,
+	MANNY_REBUILD_DEPENDENCY_MISSING,
+	MANNY_REBUILD_DEPENDENCY_CHANGED,
+	MANNY_REBUILD_INPUT_NEWER,
 }
-Bob_Rebuild_Reason;
+Manny_Rebuild_Reason;
 
-struct Bob_Build
+struct Manny_Build
 {
 	Arena          arena;
-	Bob           *graph;
-	Bob_Execution *execution;
-	Bob_Interner  *interner;
-	Bob_Path       root;
+	Manny           *graph;
+	Manny_Execution *execution;
+	Manny_Interner  *interner;
+	Manny_Path       root;
 };
 
 typedef struct Build_Task
@@ -46,13 +46,13 @@ typedef struct Build_Task
 	// Derived compiler metadata from the command line.
 	Compiler_Command compiler;
 
-	Bob_Path_Array   inputs;
-	Bob_Path_Array   outputs;
-	Bob_Path_Array   include_directories;
-	Bob_Path         execution_directory;
-	Bob_Path         dependency_file;
+	Manny_Path_Array   inputs;
+	Manny_Path_Array   outputs;
+	Manny_Path_Array   include_directories;
+	Manny_Path         execution_directory;
+	Manny_Path         dependency_file;
 
-	Bob_Fingerprint  fingerprint;
+	Manny_Fingerprint  fingerprint;
 
 	// Whether the compiler supports deps files and the task has any outputs.
 	b32              tracks_dependencies;
@@ -62,40 +62,40 @@ typedef struct Build_Task
 }
 Build_Task;
 
-typedef struct Bob_Rebuild_Decision
+typedef struct Manny_Rebuild_Decision
 {
-	Bob_Rebuild_Reason reason;
+	Manny_Rebuild_Reason reason;
 	String             path;
 	String             reference;
-	const Bob_Node    *dependency;
+	const Manny_Node    *dependency;
 	b32                rebuild;
 }
-Bob_Rebuild_Decision;
+Manny_Rebuild_Decision;
 
-typedef struct Bob_Build_Completion
+typedef struct Manny_Build_Completion
 {
-	Bob_Build                   *build;
-	Bob_Node                    *node;
+	Manny_Build                   *build;
+	Manny_Node                    *node;
 	Build_Task                  *task;
-	Bob_Platform_Process_Result  process;
-	Bob_Path_Array               dependencies;
-	Bob_Rebuild_Decision         decision;
+	Manny_Platform_Process_Result  process;
+	Manny_Path_Array               dependencies;
+	Manny_Rebuild_Decision         decision;
 	b32                          dependency_state_valid;
 }
-Bob_Build_Completion;
+Manny_Build_Completion;
 
-typedef struct Bob_Builder
+typedef struct Manny_Builder
 {
-	Bob_Build          *build;
-	Bob                *bob;
-	Bob_Path            state_path;
+	Manny_Build          *build;
+	Manny                *manny;
+	Manny_Path            state_path;
 
 	Build_Record_Stream   record_stream;
 	Build_Record_Snapshot record_snapshot;
 
 	Arena               state_arena;
 	void               *event_user_data;
-	Bob_Event_Function *event;
+	Manny_Event_Function *event;
 	u32                 task_count;
 	u32                 completed_task_count;
 	// TODO(RJ): remove this from here!
@@ -105,18 +105,18 @@ typedef struct Bob_Builder
 	b32                 explain;
 	b32                 internal_error;
 }
-Bob_Builder;
+Manny_Builder;
 
 
 
 
-static b32 bob_path_is_absolute(String path)
+static b32 manny_path_is_absolute(String path)
 {
 	return path.size > 0 && (path.data[0] == '/' || path.data[0] == '\\' ||
 		(path.size >= 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')));
 }
 
-static b32 bob_path_platform_absolute(Arena *arena, String path, String *result)
+static b32 manny_path_platform_absolute(Arena *arena, String path, String *result)
 {
 	String terminated = path;
 	if (!string_is_terminated(terminated)) {
@@ -133,7 +133,7 @@ static b32 bob_path_platform_absolute(Arena *arena, String path, String *result)
 	return true;
 }
 
-static String bob_path_normalize_separators(String path)
+static String manny_path_normalize_separators(String path)
 {
 	u64 write = 0;
 	for (u64 read = 0; read < path.size; ++read) {
@@ -151,13 +151,13 @@ static String bob_path_normalize_separators(String path)
 	return path;
 }
 
-b32 bob_path_resolve(Bob_Build *build, Bob_Path directory, String source, Bob_Path *result)
+b32 manny_path_resolve(Manny_Build *build, Manny_Path directory, String source, Manny_Path *result)
 {
 	if (!build || !result || !source.data || source.size == 0) return false;
 	Scratch scratch = begin_scratch();
 	String candidate = source;
-	if (!bob_path_is_absolute(source)) {
-		String base = bob_path_string(build, directory);
+	if (!manny_path_is_absolute(source)) {
+		String base = manny_path_string(build, directory);
 		if (!base.data) goto failure;
 		void *start = arena_top(scratch.arena);
 		arena_append_str(scratch.arena, base);
@@ -167,12 +167,12 @@ b32 bob_path_resolve(Bob_Build *build, Bob_Path directory, String source, Bob_Pa
 		arena_finalize_string(scratch.arena, candidate);
 	}
 	String absolute;
-	if (!bob_path_platform_absolute(scratch.arena, candidate, &absolute)) goto failure;
-	absolute = bob_path_normalize_separators(absolute);
+	if (!manny_path_platform_absolute(scratch.arena, candidate, &absolute)) goto failure;
+	absolute = manny_path_normalize_separators(absolute);
 	if (!absolute.data || absolute.size == 0) goto failure;
-	Bob_Atom atom = bob_interner_intern(build->interner, absolute);
+	Manny_Atom atom = manny_interner_intern(build->interner, absolute);
 	if (!atom.id) goto failure;
-	*result = (Bob_Path){ atom };
+	*result = (Manny_Path){ atom };
 	end_scratch(scratch);
 	return true;
 
@@ -181,29 +181,29 @@ failure:
 	return false;
 }
 
-String bob_path_string(const Bob_Build *build, Bob_Path path)
+String manny_path_string(const Manny_Build *build, Manny_Path path)
 {
 	ASSERT(build);
-	return bob_interner_string(build->interner, path.atom);
+	return manny_interner_string(build->interner, path.atom);
 }
 
-b32 bob_path_is_valid(Bob_Path path)
+b32 manny_path_is_valid(Manny_Path path)
 {
-	return bob_atom_is_valid(path.atom);
+	return manny_atom_is_valid(path.atom);
 }
 
-Bob_Path bob_build_root(const Bob_Build *build)
+Manny_Path manny_build_root(const Manny_Build *build)
 {
-	return build ? build->root : (Bob_Path){0};
+	return build ? build->root : (Manny_Path){0};
 }
 
-Bob_Build *bob_build_create_at(String root)
+Manny_Build *manny_build_create_at(String root)
 {
 	Arena arena = arena_create(0);
 	if (!arena.data) return NULL;
-	arena_set_name(&arena, "Bob build");
+	arena_set_name(&arena, "Manny build");
 
-	Bob_Build *build = arena_push_zero_aligned(&arena, sizeof(*build), _Alignof(Bob_Build));
+	Manny_Build *build = arena_push_zero_aligned(&arena, sizeof(*build), _Alignof(Manny_Build));
 	if (!build) {
 		logger_log_string(LOG_LEVEL_ERROR, "build", LIT("cannot initiate build, could not allocate memory"));
 		arena_destroy(&arena);
@@ -213,8 +213,8 @@ Bob_Build *bob_build_create_at(String root)
 	build->arena = arena;
 
 	// NOTE(RJ) interner expects a stable arena pointer
-	build->interner = bob_interner_create(&build->arena);
-	build->graph = bob_create();
+	build->interner = manny_interner_create(&build->arena);
+	build->graph = manny_create();
 
 	if (!build->interner || !build->graph) {
 		logger_log_string(LOG_LEVEL_ERROR, "build", LIT("cannot initiate build, could not allocate memory"));
@@ -223,86 +223,86 @@ Bob_Build *bob_build_create_at(String root)
 
 	String absolute;
 	Scratch scratch = begin_scratch();
-	if (!root.data || root.size == 0 || !bob_path_platform_absolute(scratch.arena, root, &absolute)) {
+	if (!root.data || root.size == 0 || !manny_path_platform_absolute(scratch.arena, root, &absolute)) {
 		end_scratch(scratch);
 		goto failure;
 	}
 
-	absolute = bob_path_normalize_separators(absolute);
-	build->root.atom = bob_interner_intern(build->interner, absolute);
+	absolute = manny_path_normalize_separators(absolute);
+	build->root.atom = manny_interner_intern(build->interner, absolute);
 	end_scratch(scratch);
-	if (!bob_path_is_valid(build->root)) goto failure;
+	if (!manny_path_is_valid(build->root)) goto failure;
 	return build;
 
 failure:
-	bob_destroy(build->graph);
-	bob_interner_destroy(build->interner);
+	manny_destroy(build->graph);
+	manny_interner_destroy(build->interner);
 	arena_destroy(&arena);
 	return NULL;
 }
 
-Bob_Build *bob_build_create(void)
+Manny_Build *manny_build_create(void)
 {
 	Scratch scratch = begin_scratch();
 
-	Bob_Build *build = NULL;
+	Manny_Build *build = NULL;
 
 	String directory;
-	if (bob_platform_current_directory(scratch.arena, &directory)) {
-		build = bob_build_create_at(directory);
+	if (manny_platform_current_directory(scratch.arena, &directory)) {
+		build = manny_build_create_at(directory);
 	}
 	else {
-		logger_log_string(LOG_LEVEL_ERROR, "build", LIT("cannot initiate build, platform api function 'bob_platform_current_directory' failed"));
+		logger_log_string(LOG_LEVEL_ERROR, "build", LIT("cannot initiate build, platform api function 'manny_platform_current_directory' failed"));
 	}
 
 	end_scratch(scratch);
 	return build;
 }
 
-void bob_build_destroy(Bob_Build *build)
+void manny_build_destroy(Manny_Build *build)
 {
 	Arena arena;
 	if (!build) return;
-	bob_execution_destroy(build->execution);
-	bob_destroy(build->graph);
-	bob_interner_destroy(build->interner);
+	manny_execution_destroy(build->execution);
+	manny_destroy(build->graph);
+	manny_interner_destroy(build->interner);
 	arena = build->arena;
 	arena_destroy(&arena);
 }
 
-Bob *bob_build_graph(Bob_Build *build)
+Manny *manny_build_graph(Manny_Build *build)
 {
 	return build ? build->graph : NULL;
 }
 
-const Bob *bob_build_graph_const(const Bob_Build *build)
+const Manny *manny_build_graph_const(const Manny_Build *build)
 {
 	return build ? build->graph : NULL;
 }
 
 
-static Bob_Node_Result build_task_action(Bob_Node_Context *context, void *user_data);
+static Manny_Node_Result build_task_action(Manny_Node_Context *context, void *user_data);
 
-static Bob_Rebuild_Decision task_rebuild_decision(Bob_Builder *builder, const Bob_Node *node, const Build_Task *task)
+static Manny_Rebuild_Decision task_rebuild_decision(Manny_Builder *builder, const Manny_Node *node, const Build_Task *task)
 {
-	const Bob_Path_Array *inputs = &task->inputs;
-	const Bob_Path_Array *outputs = &task->outputs;
+	const Manny_Path_Array *inputs = &task->inputs;
+	const Manny_Path_Array *outputs = &task->outputs;
 	u64 oldest_output = UINT64_MAX;
 	u64 newest_input = 0;
 	u64 primary_output_stamp = 0;
 	String oldest_output_path = {0};
 	String newest_input_path = {0};
 
-	if (outputs->count == 0) return (Bob_Rebuild_Decision){
-		.reason = BOB_REBUILD_NO_OUTPUTS,
+	if (outputs->count == 0) return (Manny_Rebuild_Decision){
+		.reason = MANNY_REBUILD_NO_OUTPUTS,
 		.rebuild = true,
 	};
 	for (u32 i = 0; i < outputs->count; ++i) {
-		Bob_Platform_File_Info info;
-		String path = bob_path_string(builder->build, outputs->items[i]);
-		if (!bob_platform_file_info(path, &info)) {
-			return (Bob_Rebuild_Decision){
-				.reason = BOB_REBUILD_OUTPUT_MISSING,
+		Manny_Platform_File_Info info;
+		String path = manny_path_string(builder->build, outputs->items[i]);
+		if (!manny_platform_file_info(path, &info)) {
+			return (Manny_Rebuild_Decision){
+				.reason = MANNY_REBUILD_OUTPUT_MISSING,
 				.path = path,
 				.rebuild = true,
 			};
@@ -314,11 +314,11 @@ static Bob_Rebuild_Decision task_rebuild_decision(Bob_Builder *builder, const Bo
 		if (i == 0 && !info.is_directory) primary_output_stamp = (u64)info.modified_unix_ms;
 	}
 	for (u32 i = 0; i < inputs->count; ++i) {
-		Bob_Platform_File_Info info;
-		String path = bob_path_string(builder->build, inputs->items[i]);
-		if (!bob_platform_file_info(path, &info)) {
-			return (Bob_Rebuild_Decision){
-				.reason = BOB_REBUILD_INPUT_MISSING,
+		Manny_Platform_File_Info info;
+		String path = manny_path_string(builder->build, inputs->items[i]);
+		if (!manny_platform_file_info(path, &info)) {
+			return (Manny_Rebuild_Decision){
+				.reason = MANNY_REBUILD_INPUT_MISSING,
 				.path = path,
 				.rebuild = true,
 			};
@@ -330,16 +330,16 @@ static Bob_Rebuild_Decision task_rebuild_decision(Bob_Builder *builder, const Bo
 	}
 
 	if (outputs->count > 0) {
-		Bob_Path output_path = outputs->items[0];
-		String output = bob_path_string(builder->build, output_path);
+		Manny_Path output_path = outputs->items[0];
+		String output = manny_path_string(builder->build, output_path);
 		Build_Record_Task state_task;
-		if (!build_record_snapshot_get(&builder->record_snapshot, output_path, &state_task)) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
-		if (state_task.output_stamp != primary_output_stamp) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_STATE_CHANGED, .path = output, .rebuild = true };
-		if (memcmp(state_task.fingerprint.bytes, task->fingerprint.bytes, BOB_FINGERPRINT_SIZE) != 0) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_FINGERPRINT_CHANGED, .path = output, .rebuild = true };
+		if (!build_record_snapshot_get(&builder->record_snapshot, output_path, &state_task)) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
+		if (state_task.output_stamp != primary_output_stamp) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_STATE_CHANGED, .path = output, .rebuild = true };
+		if (memcmp(state_task.fingerprint.bytes, task->fingerprint.bytes, MANNY_FINGERPRINT_SIZE) != 0) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_FINGERPRINT_CHANGED, .path = output, .rebuild = true };
 		for (u32 i = 0; i < state_task.dependencies.count; ++i) {
-			Bob_Platform_File_Info info;
-			String dependency = bob_path_string(builder->build, state_task.dependencies.items[i]);
-			if (!dependency.data || !bob_platform_file_info(dependency, &info)) return (Bob_Rebuild_Decision){ .reason = BOB_REBUILD_DEPENDENCY_MISSING, .path = dependency, .rebuild = true };
+			Manny_Platform_File_Info info;
+			String dependency = manny_path_string(builder->build, state_task.dependencies.items[i]);
+			if (!dependency.data || !manny_platform_file_info(dependency, &info)) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_DEPENDENCY_MISSING, .path = dependency, .rebuild = true };
 			if ((u64)info.modified_unix_ms > newest_input) {
 				newest_input = (u64)info.modified_unix_ms;
 				newest_input_path = dependency;
@@ -347,40 +347,40 @@ static Bob_Rebuild_Decision task_rebuild_decision(Bob_Builder *builder, const Bo
 		}
 	}
 
-	for (u32 i = 0; i < bob_dependency_count(node); ++i) {
-		Bob_Node *dependency = bob_dependency(node, i);
-		if (!dependency || bob_execution_node_result(builder->build->execution, dependency).changed) {
-			return (Bob_Rebuild_Decision){
-				.reason = BOB_REBUILD_DEPENDENCY_CHANGED,
+	for (u32 i = 0; i < manny_dependency_count(node); ++i) {
+		Manny_Node *dependency = manny_dependency(node, i);
+		if (!dependency || manny_execution_node_result(builder->build->execution, dependency).changed) {
+			return (Manny_Rebuild_Decision){
+				.reason = MANNY_REBUILD_DEPENDENCY_CHANGED,
 				.dependency = dependency,
 				.rebuild = true,
 			};
 		}
 	}
-	if (newest_input > oldest_output) return (Bob_Rebuild_Decision){
-		.reason = BOB_REBUILD_INPUT_NEWER,
+	if (newest_input > oldest_output) return (Manny_Rebuild_Decision){
+		.reason = MANNY_REBUILD_INPUT_NEWER,
 		.path = newest_input_path,
 		.reference = oldest_output_path,
 		.rebuild = true,
 	};
-	return (Bob_Rebuild_Decision){
-		.reason = BOB_REBUILD_UP_TO_DATE,
+	return (Manny_Rebuild_Decision){
+		.reason = MANNY_REBUILD_UP_TO_DATE,
 		.path = newest_input_path,
 		.reference = oldest_output_path,
 	};
 }
 
-static void run_command(Bob_Node_Context *context, Bob_Build *build, const Build_Task *task, Bob_Build_Completion *completion)
+static void run_command(Manny_Node_Context *context, Manny_Build *build, const Build_Task *task, Manny_Build_Completion *completion)
 {
 	Scratch scratch = begin_different_scratch(context->arena);
-	String dependency_file = bob_path_string(build, task->dependency_file);
-	String execution_directory = bob_path_string(build, task->execution_directory);
+	String dependency_file = manny_path_string(build, task->dependency_file);
+	String execution_directory = manny_path_string(build, task->execution_directory);
 	if (task->tracks_dependencies) {
 		platform_remove_file(dependency_file.data);
 	}
 
-	bob_platform_run_command(task->execution_command_line, context->arena,
-		(Bob_Platform_Process_Options){
+	manny_platform_run_command(task->execution_command_line, context->arena,
+		(Manny_Platform_Process_Options){
 			.working_directory = execution_directory,
 			.capture_stderr = true,
 		}, &completion->process);
@@ -390,15 +390,15 @@ static void run_command(Bob_Node_Context *context, Bob_Build *build, const Build
 		b32 process_succeeded = completion->process.error_code == 0 &&
 			completion->process.exit_code == 0;
 		completion->dependency_state_valid = process_succeeded &&
-			bob_platform_read_entire_file(scratch.arena, dependency_file, &contents) &&
+			manny_platform_read_entire_file(scratch.arena, dependency_file, &contents) &&
 			make_depfile_parse(scratch.arena, contents, &dependencies);
 		if (completion->dependency_state_valid && dependencies.count > 0) {
 			completion->dependencies.items = arena_push_zero_aligned(context->arena,
 				(u64)dependencies.count * sizeof(*completion->dependencies.items),
-				_Alignof(Bob_Path));
+				_Alignof(Manny_Path));
 			if (!completion->dependencies.items) completion->dependency_state_valid = false;
 			for (u32 i = 0; completion->dependency_state_valid && i < dependencies.count; ++i) {
-				if (!bob_path_resolve(build, task->execution_directory,
+				if (!manny_path_resolve(build, task->execution_directory,
 					dependencies.items[i], completion->dependencies.items + i)) {
 					completion->dependency_state_valid = false;
 				}
@@ -410,15 +410,15 @@ static void run_command(Bob_Node_Context *context, Bob_Build *build, const Build
 	end_scratch(scratch);
 }
 
-static Bob_Node_Result build_task_action(Bob_Node_Context *context, void *user_data)
+static Manny_Node_Result build_task_action(Manny_Node_Context *context, void *user_data)
 {
-	Bob_Builder *builder = context->execution_data;
+	Manny_Builder *builder = context->execution_data;
 	Build_Task *task = user_data;
-	Bob_Build_Completion *completion;
+	Manny_Build_Completion *completion;
 	b32 succeeded;
 
-	completion = arena_push_zero_aligned(context->arena, sizeof(*completion), _Alignof(Bob_Build_Completion));
-	if (!completion || !builder || !task) return (Bob_Node_Result){0};
+	completion = arena_push_zero_aligned(context->arena, sizeof(*completion), _Alignof(Manny_Build_Completion));
+	if (!completion || !builder || !task) return (Manny_Node_Result){0};
 	completion->build = builder->build;
 	completion->node = context->node;
 	completion->task = task;
@@ -434,54 +434,54 @@ static Bob_Node_Result build_task_action(Bob_Node_Context *context, void *user_d
 	}
 	succeeded = !completion->decision.rebuild ||
 		(completion->process.error_code == 0 && completion->process.exit_code == 0);
-	return (Bob_Node_Result){
+	return (Manny_Node_Result){
 		.output = completion,
 		.succeeded = succeeded,
 		.changed = succeeded && completion->decision.rebuild && !task->transparent,
 	};
 }
 
-static void report_explanation(const Bob_Build_Completion *completion)
+static void report_explanation(const Manny_Build_Completion *completion)
 {
-	const Bob_Rebuild_Decision *decision = &completion->decision;
-	const char *name = bob_task_name(completion->node);
+	const Manny_Rebuild_Decision *decision = &completion->decision;
+	const char *name = manny_task_name(completion->node);
 	switch (decision->reason) {
-	case BOB_REBUILD_UP_TO_DATE:
+	case MANNY_REBUILD_UP_TO_DATE:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: inputs are not newer than outputs", name);
 		break;
-	case BOB_REBUILD_NO_OUTPUTS:
+	case MANNY_REBUILD_NO_OUTPUTS:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because no outputs are declared", name);
 		break;
-	case BOB_REBUILD_OUTPUT_MISSING:
+	case MANNY_REBUILD_OUTPUT_MISSING:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because output is missing: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_INPUT_MISSING:
+	case MANNY_REBUILD_INPUT_MISSING:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because input is missing: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_STATE_MISSING:
+	case MANNY_REBUILD_STATE_MISSING:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because dependency state is missing: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_STATE_CHANGED:
+	case MANNY_REBUILD_STATE_CHANGED:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because recorded state does not match the output: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_FINGERPRINT_CHANGED:
+	case MANNY_REBUILD_FINGERPRINT_CHANGED:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because task configuration changed: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_DEPENDENCY_MISSING:
+	case MANNY_REBUILD_DEPENDENCY_MISSING:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because recorded dependency is missing: %s", name, decision->path.data);
 		break;
-	case BOB_REBUILD_DEPENDENCY_CHANGED:
+	case MANNY_REBUILD_DEPENDENCY_CHANGED:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because dependency changed: %s", name,
-			decision->dependency ? bob_task_name(decision->dependency) : "unknown");
+			decision->dependency ? manny_task_name(decision->dependency) : "unknown");
 		break;
-	case BOB_REBUILD_INPUT_NEWER:
+	case MANNY_REBUILD_INPUT_NEWER:
 		logger_log(LOG_LEVEL_INFO, "explain", "%s: rebuilding because %s is newer than %s", name,
 			decision->path.data, decision->reference.data);
 		break;
 	}
 }
 
-static void report_completion(const Bob_Build_Completion *completion, u32 completed, u32 total)
+static void report_completion(const Manny_Build_Completion *completion, u32 completed, u32 total)
 {
 	const Build_Task *build_task = completion->task;
 	String command_line = build_task->command_line;
@@ -491,30 +491,30 @@ static void report_completion(const Bob_Build_Completion *completion, u32 comple
 
 	if (!completion->decision.rebuild) {
 		snprintf(tag, sizeof(tag), "%u/%u up-to-date", completed, total);
-		logger_log_at(0, LOG_LEVEL_INFO, tag, "%s", bob_task_name(completion->node));
+		logger_log_at(0, LOG_LEVEL_INFO, tag, "%s", manny_task_name(completion->node));
 		logger_log_at(1, LOG_LEVEL_TRACE, "command", "%s", command_line.data);
 		return;
 	}
 	if (completion->process.output.size > 0) {
 		if (succeeded) logger_log_string_at(0, LOG_LEVEL_INFO,
-			bob_task_name(completion->node), completion->process.output);
-		else logger_log_string(LOG_LEVEL_ERROR, bob_task_name(completion->node),
+			manny_task_name(completion->node), completion->process.output);
+		else logger_log_string(LOG_LEVEL_ERROR, manny_task_name(completion->node),
 			completion->process.output);
 	}
 	snprintf(tag, sizeof(tag), "%u/%u %s", completed, total, succeeded ? "succeeded" : "failed");
-	logger_log_at(0, succeeded ? LOG_LEVEL_SUCCESS : LOG_LEVEL_ERROR, tag, "%s", bob_task_name(completion->node));
+	logger_log_at(0, succeeded ? LOG_LEVEL_SUCCESS : LOG_LEVEL_ERROR, tag, "%s", manny_task_name(completion->node));
 	if (succeeded) {
 		logger_log_at(1, LOG_LEVEL_TRACE, "command", "%s", command_line.data);
 		logger_log_at(1, LOG_LEVEL_TRACE, "exit-code", "0");
 	}
 	if (completion->process.error_code != 0) {
 		Scratch scratch = begin_scratch();
-		logger_log(LOG_LEVEL_ERROR, bob_task_name(completion->node), "%s",
+		logger_log(LOG_LEVEL_ERROR, manny_task_name(completion->node), "%s",
 			completion->process.launched ? "process error" : "failed to start process");
 		logger_log_at(1, LOG_LEVEL_ERROR, "command", "%s", command_line.data);
 		{
 			String message;
-			if (bob_platform_error_message(completion->process.error_code,
+			if (manny_platform_error_message(completion->process.error_code,
 				scratch.arena, &message)) {
 				logger_log(LOG_LEVEL_ERROR, "os", "error %u: %s",
 					completion->process.error_code, message.data);
@@ -525,39 +525,39 @@ static void report_completion(const Bob_Build_Completion *completion, u32 comple
 		if (build_task->compiler.executable.data) {
 			logger_log(LOG_LEVEL_ERROR, "executable", "%s (%s)",
 				build_task->compiler.executable.data,
-				bob_platform_executable_resolves(build_task->compiler.executable) ?
+				manny_platform_executable_resolves(build_task->compiler.executable) ?
 				"found" : "not found in current directory or PATH");
 		}
 		else logger_log(LOG_LEVEL_ERROR, "executable", "unable to parse from command");
-		String execution_directory = bob_path_string(completion->build, build_task->execution_directory);
+		String execution_directory = manny_path_string(completion->build, build_task->execution_directory);
 		logger_log(LOG_LEVEL_ERROR, "working-directory", "%s", execution_directory.data);
 		end_scratch(scratch);
 	}
 	else if (completion->process.exit_code != 0) {
-		logger_log(LOG_LEVEL_ERROR, bob_task_name(completion->node),
+		logger_log(LOG_LEVEL_ERROR, manny_task_name(completion->node),
 			"process exited with code %u", completion->process.exit_code);
 		logger_log_at(1, LOG_LEVEL_ERROR, "command", "%s", command_line.data);
 	}
 }
 
-static void record_task_completion_state(Bob_Builder *builder, const Bob_Build_Completion *completion, b32 succeeded)
+static void record_task_completion_state(Manny_Builder *builder, const Manny_Build_Completion *completion, b32 succeeded)
 {
 	if (!completion->decision.rebuild || completion->task->outputs.count == 0 || builder->internal_error) return;
-	Bob_Path output_path = completion->task->outputs.items[0];
-	String state_path = bob_path_string(builder->build, builder->state_path);
+	Manny_Path output_path = completion->task->outputs.items[0];
+	String state_path = manny_path_string(builder->build, builder->state_path);
 
 	if (!succeeded || (completion->task->tracks_dependencies && !completion->dependency_state_valid)) {
 		if (!build_record_stream_append_remove(&builder->record_stream, state_path, output_path)) builder->internal_error = true;
 		else builder->state_changed = true;
 
 		if (succeeded && completion->task->tracks_dependencies && !completion->dependency_state_valid) {
-			log_warning("could not read compiler dependencies for %s", bob_task_name(completion->node));
+			log_warning("could not read compiler dependencies for %s", manny_task_name(completion->node));
 		}
 		return;
 	}
-	Bob_Platform_File_Info info;
-	String output = bob_path_string(builder->build, output_path);
-	u64 output_stamp = bob_platform_file_info(output, &info) && !info.is_directory ? (u64)info.modified_unix_ms : 0;
+	Manny_Platform_File_Info info;
+	String output = manny_path_string(builder->build, output_path);
+	u64 output_stamp = manny_platform_file_info(output, &info) && !info.is_directory ? (u64)info.modified_unix_ms : 0;
 	Build_Record_Task record = {
 		.output = output_path,
 		.output_stamp = output_stamp,
@@ -569,13 +569,13 @@ static void record_task_completion_state(Bob_Builder *builder, const Bob_Build_C
 }
 
 // TODO(RJ): this is to be removed!
-static void build_task_event(Bob_Event event, void *user_data)
+static void build_task_event(Manny_Event event, void *user_data)
 {
-	Bob_Builder *builder = user_data;
+	Manny_Builder *builder = user_data;
 
-	if (event.type == BOB_EVENT_COMPLETED && event.node && bob_node_function(event.node) == build_task_action)
+	if (event.type == MANNY_EVENT_COMPLETED && event.node && manny_node_function(event.node) == build_task_action)
 	{
-		Bob_Build_Completion *completion = event.result.output;
+		Manny_Build_Completion *completion = event.result.output;
 		builder->completed_task_count ++;
 		if (!completion) builder->internal_error = true;
 		else
@@ -594,36 +594,36 @@ static void build_task_event(Bob_Event event, void *user_data)
 static b32 valid_task(const Build_Task *task)
 {
 	return task && task->command_line.data && task->execution_command_line.data &&
-		bob_path_is_valid(task->execution_directory) &&
+		manny_path_is_valid(task->execution_directory) &&
 		(!task->inputs.count || task->inputs.items) &&
 		(!task->outputs.count || task->outputs.items) &&
 		(!task->include_directories.count || task->include_directories.items);
 }
 
-b32 bob_build(Bob_Build *build, Bob_Build_Params options)
+b32 manny_build(Manny_Build *build, Manny_Build_Params options)
 {
-	Bob_Builder builder = {0};
-	Bob_Error execution_error;
+	Manny_Builder builder = {0};
+	Manny_Error execution_error;
 
 	if (!build || !build->graph || options.worker_count == 0) return false;
 
-	bob_execution_destroy(build->execution);
+	manny_execution_destroy(build->execution);
 	build->execution = NULL;
 
-	Bob *bob = build->graph;
+	Manny *manny = build->graph;
 
 	builder.build = build;
-	builder.bob   = bob;
+	builder.manny   = manny;
 	builder.event = options.event;
 	builder.event_user_data = options.user_data;
 	builder.explain = options.explain;
 
-	if (!bob_path_resolve(build, bob_build_root(build), LIT(BOB_BUILD_STATE_PATH), &builder.state_path)) return false;
+	if (!manny_path_resolve(build, manny_build_root(build), LIT(MANNY_BUILD_STATE_PATH), &builder.state_path)) return false;
 
-	for (u32 i = 0; i < bob_node_count(bob); ++i) {
-		Bob_Node *node = bob_node_at(bob, i);
-		if (bob_node_function(node) != build_task_action) continue;
-		const Build_Task *task = bob_node_user_data(node);
+	for (u32 i = 0; i < manny_node_count(manny); ++i) {
+		Manny_Node *node = manny_node_at(manny, i);
+		if (manny_node_function(node) != build_task_action) continue;
+		const Build_Task *task = manny_node_user_data(node);
 		if (!valid_task(task)) return false;
 		++builder.task_count;
 		if (task->outputs.count > 0) builder.state_tracking = true;
@@ -644,20 +644,20 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 	}
 
 	if (builder.state_tracking) {
-		String state_path = bob_path_string(build, builder.state_path);
+		String state_path = manny_path_string(build, builder.state_path);
 		Build_Record_Result load_result = build_record_stream_load(&builder.record_stream, state_path);
 		if (load_result == BUILD_RECORD_ERROR) {
-			log_warning("could not load Bob build state");
+			log_warning("could not load Manny build state");
 			result = false;
 			goto cleanup;
 		}
 		else if (load_result == BUILD_RECORD_INVALID) {
-			log_warning("ignoring invalid Bob build state");
+			log_warning("ignoring invalid Manny build state");
 			build_record_stream_clear(&builder.record_stream);
 		}
 		if (load_result != BUILD_RECORD_OK) {
 			if (!build_record_stream_compact(&builder.record_stream, state_path)) {
-				log_warning("could not prepare Bob build state");
+				log_warning("could not prepare Manny build state");
 				result = false;
 				goto cleanup;
 			}
@@ -669,23 +669,23 @@ b32 bob_build(Bob_Build *build, Bob_Build_Params options)
 		goto cleanup;
 	}
 
-	execution_error = bob_execution_create(bob, &build->execution);
-	if (execution_error != BOB_OK) {
-		log_error("unable to create Bob execution: %s", bob_error_string(execution_error));
+	execution_error = manny_execution_create(manny, &build->execution);
+	if (execution_error != MANNY_OK) {
+		log_error("unable to create Manny execution: %s", manny_error_string(execution_error));
 		result = false;
 		goto cleanup;
 	}
 	// TODO(RJ): can we get rid of this callback thing and instead just have a loop here that
 	// executes until get an event?!
-	result = bob_execute(build->execution, (Bob_Exec_Params){
+	result = manny_execute(build->execution, (Manny_Exec_Params){
 		.worker_count = options.worker_count,
 		.user_data = &builder,
 		.event = build_task_event,
 	});
 	if (builder.internal_error) result = false;
 	if (result && builder.state_tracking && builder.state_changed) {
-		if (!build_record_stream_compact(&builder.record_stream, bob_path_string(build, builder.state_path))) {
-			log_warning("could not compact Bob build state");
+		if (!build_record_stream_compact(&builder.record_stream, manny_path_string(build, builder.state_path))) {
+			log_warning("could not compact Manny build state");
 			result = false;
 		}
 	}
@@ -730,27 +730,27 @@ static b32 fingerprint_string(blake3_hasher *hasher, String value)
 	return true;
 }
 
-static b32 fingerprint_paths(const Bob_Build *build, blake3_hasher *hasher, Bob_Path_Array paths)
+static b32 fingerprint_paths(const Manny_Build *build, blake3_hasher *hasher, Manny_Path_Array paths)
 {
 	if (!build || !hasher || (paths.count && !paths.items)) return false;
 	fingerprint_u32(hasher, paths.count);
 	for (u32 i = 0; i < paths.count; ++i) {
-		String path = bob_path_string(build, paths.items[i]);
+		String path = manny_path_string(build, paths.items[i]);
 		if (!path.data || !fingerprint_string(hasher, path)) return false;
 	}
 	return true;
 }
 
-static b32 build_task_fingerprint(const Bob_Build *build, const Build_Task *task, Bob_Fingerprint *result)
+static b32 build_task_fingerprint(const Manny_Build *build, const Build_Task *task, Manny_Fingerprint *result)
 {
-	static const char domain[] = "bob.task.fingerprint";
+	static const char domain[] = "manny.task.fingerprint";
 	blake3_hasher hasher;
 	if (!build || !task || !result) return false;
 	blake3_hasher_init(&hasher);
 	blake3_hasher_update(&hasher, domain, sizeof(domain) - 1);
 	fingerprint_u32(&hasher, 1);
 	if (!fingerprint_string(&hasher, task->command_line)) return false;
-	if (!fingerprint_string(&hasher, bob_path_string(build, task->execution_directory))) return false;
+	if (!fingerprint_string(&hasher, manny_path_string(build, task->execution_directory))) return false;
 	if (!fingerprint_paths(build, &hasher, task->inputs)) return false;
 	if (!fingerprint_paths(build, &hasher, task->outputs)) return false;
 	if (!fingerprint_paths(build, &hasher, task->include_directories)) return false;
@@ -759,43 +759,43 @@ static b32 build_task_fingerprint(const Bob_Build *build, const Build_Task *task
 	return true;
 }
 
-static b32 copy_optional_string(Bob *bob, String source, String *result)
+static b32 copy_optional_string(Manny *manny, String source, String *result)
 {
 	if (!source.data) return source.size == 0;
-	*result = bob_copy_string(bob, source);
+	*result = manny_copy_string(manny, source);
 	return result->data != NULL;
 }
 
-static b32 resolve_task_paths(Bob_Build *build, Bob_Path directory, String_Array source, Bob_Path_Array *result)
+static b32 resolve_task_paths(Manny_Build *build, Manny_Path directory, String_Array source, Manny_Path_Array *result)
 {
-	Bob *bob = build ? build->graph : NULL;
-	*result = (Bob_Path_Array){0};
+	Manny *manny = build ? build->graph : NULL;
+	*result = (Manny_Path_Array){0};
 	if (source.count == 0) return true;
-	result->items = bob_allocate(bob, (u64)source.count * sizeof(*result->items), _Alignof(Bob_Path));
+	result->items = manny_allocate(manny, (u64)source.count * sizeof(*result->items), _Alignof(Manny_Path));
 	if (!result->items) return false;
 	for (u32 i = 0; i < source.count; ++i) {
-		if (!bob_path_resolve(build, directory, source.items[i], result->items + i)) return false;
+		if (!manny_path_resolve(build, directory, source.items[i], result->items + i)) return false;
 		++result->count;
 	}
 	return true;
 }
 
-static Build_Task *create_build_task(Bob_Build *build, Bob_Task_Desc desc)
+static Build_Task *create_build_task(Manny_Build *build, Manny_Task_Desc desc)
 {
-	Bob *bob = build ? build->graph : NULL;
-	Build_Task *task = bob_allocate(bob, sizeof(*task), _Alignof(Build_Task));
+	Manny *manny = build ? build->graph : NULL;
+	Build_Task *task = manny_allocate(manny, sizeof(*task), _Alignof(Build_Task));
 	Scratch scratch;
 	Compiler_Command compiler;
 	b32 valid = false;
 	if (!task || !desc.command_line.data) return NULL;
 	if (desc.working_directory.data && desc.working_directory.size == 0) return NULL;
-	task->command_line = bob_copy_string(bob, desc.command_line);
+	task->command_line = manny_copy_string(manny, desc.command_line);
 	task->transparent = desc.transparent;
 	if (!task->command_line.data) return NULL;
 
 	scratch = begin_scratch();
-	task->execution_directory = bob_build_root(build);
-	if (desc.working_directory.data && !bob_path_resolve(build, task->execution_directory, desc.working_directory, &task->execution_directory)) goto done;
+	task->execution_directory = manny_build_root(build);
+	if (desc.working_directory.data && !manny_path_resolve(build, task->execution_directory, desc.working_directory, &task->execution_directory)) goto done;
 	if (!resolve_task_paths(build, task->execution_directory, desc.inputs, &task->inputs) ||
 		!resolve_task_paths(build, task->execution_directory, desc.outputs, &task->outputs) ||
 		!resolve_task_paths(build, task->execution_directory, desc.include_directories, &task->include_directories)) goto done;
@@ -804,7 +804,7 @@ static Build_Task *create_build_task(Bob_Build *build, Bob_Task_Desc desc)
 	}
 	task->compiler = compiler;
 	task->compiler.executable = (String){0};
-	if (!copy_optional_string(bob, compiler.executable, &task->compiler.executable)) {
+	if (!copy_optional_string(manny, compiler.executable, &task->compiler.executable)) {
 		goto done;
 	}
 	task->execution_command_line = task->command_line;
@@ -812,13 +812,13 @@ static Build_Task *create_build_task(Bob_Build *build, Bob_Task_Desc desc)
 	if (task->tracks_dependencies) {
 		String augmented;
 		void *start = arena_top(scratch.arena);
-		arena_append_str(scratch.arena, bob_path_string(build, task->outputs.items[0]));
+		arena_append_str(scratch.arena, manny_path_string(build, task->outputs.items[0]));
 		arena_append_text(scratch.arena, ".d.tmp");
 		String dependency_file = arena_string_from(scratch.arena, start);
-		if (!bob_path_resolve(build, task->execution_directory, dependency_file, &task->dependency_file) ||
+		if (!manny_path_resolve(build, task->execution_directory, dependency_file, &task->dependency_file) ||
 			!compiler_command_add_dependencies(scratch.arena, &task->compiler,
-				task->command_line, bob_path_string(build, task->dependency_file), &augmented)) goto done;
-		task->execution_command_line = bob_copy_string(bob, augmented);
+				task->command_line, manny_path_string(build, task->dependency_file), &augmented)) goto done;
+		task->execution_command_line = manny_copy_string(manny, augmented);
 		if (!task->execution_command_line.data) goto done;
 	}
 	if (!build_task_fingerprint(build, task, &task->fingerprint)) goto done;
@@ -829,15 +829,15 @@ done:
 	return valid ? task : NULL;
 }
 
-Bob_Error bob_add_task(Bob_Build *build, Bob_Task_Desc desc, Bob_Node **node_out)
+Manny_Error manny_add_task(Manny_Build *build, Manny_Task_Desc desc, Manny_Node **node_out)
 {
-	Bob *bob = build ? build->graph : NULL;
+	Manny *manny = build ? build->graph : NULL;
 	Build_Task *task;
-	if (!bob || !desc.name.data || !node_out) return BOB_ERROR_INVALID_TASK;
-	if (bob_is_sealed(bob)) return BOB_ERROR_GRAPH_SEALED;
+	if (!manny || !desc.name.data || !node_out) return MANNY_ERROR_INVALID_TASK;
+	if (manny_is_sealed(manny)) return MANNY_ERROR_GRAPH_SEALED;
 	task = create_build_task(build, desc);
-	if (!task) return BOB_ERROR_OUT_OF_MEMORY;
-	return bob_add_node(bob, (Bob_Node_Desc){
+	if (!task) return MANNY_ERROR_OUT_OF_MEMORY;
+	return manny_add_node(manny, (Manny_Node_Desc){
 		.name = desc.name,
 		.function = build_task_action,
 		.user_data = task,
@@ -845,22 +845,22 @@ Bob_Error bob_add_task(Bob_Build *build, Bob_Task_Desc desc, Bob_Node **node_out
 }
 
 // TODO(RJ): remove this entirely, only tests use this thing for whatever reason!
-Bob_Error bob_set_task(Bob_Build *build, Bob_Node *node, Bob_Task_Desc task)
+Manny_Error manny_set_task(Manny_Build *build, Manny_Node *node, Manny_Task_Desc task)
 {
-	Bob *bob = build ? build->graph : NULL;
+	Manny *manny = build ? build->graph : NULL;
 	Build_Task *copy;
-	Bob_Error result;
-	if (!bob || !node) return BOB_ERROR_INVALID_TASK;
-	if (bob_is_sealed(bob)) return BOB_ERROR_GRAPH_SEALED;
-	for (u32 i = 0; i < bob_node_count(bob); ++i) {
-		if (bob_node_at(bob, i) == node) goto found;
+	Manny_Error result;
+	if (!manny || !node) return MANNY_ERROR_INVALID_TASK;
+	if (manny_is_sealed(manny)) return MANNY_ERROR_GRAPH_SEALED;
+	for (u32 i = 0; i < manny_node_count(manny); ++i) {
+		if (manny_node_at(manny, i) == node) goto found;
 	}
-	return BOB_ERROR_INVALID_TASK;
+	return MANNY_ERROR_INVALID_TASK;
 
 found:
 	copy = create_build_task(build, task);
-	if (!copy) return BOB_ERROR_OUT_OF_MEMORY;
-	result = bob_set_node(bob, node, (Bob_Node_Desc){
+	if (!copy) return MANNY_ERROR_OUT_OF_MEMORY;
+	result = manny_set_node(manny, node, (Manny_Node_Desc){
 		.name = task.name,
 		.function = build_task_action,
 		.user_data = copy,
@@ -868,17 +868,17 @@ found:
 	return result;
 }
 
-u32 bob_task_count(const Bob_Build *build)
+u32 manny_task_count(const Manny_Build *build)
 {
-	return bob_node_count(bob_build_graph_const(build));
+	return manny_node_count(manny_build_graph_const(build));
 }
 
-const char *bob_task_name(const Bob_Node *node)
+const char *manny_task_name(const Manny_Node *node)
 {
-	return bob_node_name(node);
+	return manny_node_name(node);
 }
 
-Bob_Node_Status bob_task_state(const Bob_Build *build, const Bob_Node *node)
+Manny_Node_Status manny_task_state(const Manny_Build *build, const Manny_Node *node)
 {
-	return build && build->execution ? bob_execution_node_state(build->execution, node) : BOB_NODE_PENDING;
+	return build && build->execution ? manny_execution_node_state(build->execution, node) : MANNY_NODE_PENDING;
 }

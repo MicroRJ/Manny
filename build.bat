@@ -1,10 +1,10 @@
 @echo off
 setlocal
 
-if not exist blessed\bob.exe (
-    echo Missing blessed\bob.exe.
+if not exist blessed\manny.exe (
+    echo Missing blessed\manny.exe.
     exit /b 1
 )
 
-blessed\bob.exe build.elf %*
+blessed\manny.exe build.elf %*
 exit /b %errorlevel%
