@@ -99,64 +99,68 @@ b32 manny_platform_local_app_data(Arena *arena, String *result)
 	return manny_platform_get_environment(LIT("LOCALAPPDATA"), arena, result) && result->size > 0;
 }
 
-static b32 append_process_pipe(Platform_Process *process, Arena *arena, b32 standard_error, u32 *error_code)
+static b32 append_process_pipe(day_Process *process, Arena *arena, b32 standard_error, u32 *error_code)
 {
 	char buffer[4096];
-	Platform_Process_Read_Result read = standard_error ? platform_read_process_error(process, buffer, sizeof(buffer)) : platform_read_process_output(process, buffer, sizeof(buffer));
+	u64 size;
+	b32 end_of_stream;
+	day_Result read = day_read_process(process, standard_error ? DAY_PROCESS_ERROR : DAY_PROCESS_OUTPUT,
+		buffer, sizeof(buffer), &size, &end_of_stream);
+	(void)end_of_stream;
 	if (read.error) {
 		*error_code = read.os_error ? read.os_error : (u32)read.error;
 		return false;
 	}
-	if (read.size && !arena_push_copy(arena, read.size, buffer)) {
+	if (size && !arena_push_copy(arena, size, buffer)) {
 		*error_code = MANNY_PLATFORM_ERROR_OUT_OF_MEMORY;
 		return false;
 	}
-	return read.size != 0;
+	return size != 0;
 }
 
 b32 manny_platform_run_command(String command_line, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result)
 {
 	u64 mark;
-	Platform_Process_Start_Result start;
-	Platform_Process_Wait_Result wait = {0};
-	if (!string_is_terminated(command_line) ||
-		(options.working_directory.data &&
-			!string_is_terminated(options.working_directory)) || !arena || !result) return false;
+	day_Process process;
+	day_Result status;
+	b32 completed;
+	u32 exit_code;
+	if (!arena || !result) return false;
 	mark = arena_mark(arena);
 	*result = (Manny_Platform_Process_Result){ .exit_code = UINT32_MAX };
-	start = platform_start_process(command_line.data, (Platform_Process_Options){
-		.working_directory = options.working_directory.data,
-		.capture_standard_output = true,
-		.capture_standard_error = options.capture_stderr,
+	status = day_start_process(command_line, (day_Process_Options){
+		.working_directory = options.working_directory,
+		.capture_output = true,
+		.capture_error = options.capture_stderr,
 		.hide_window = options.hide_window,
-	});
-	if (start.error) {
-		result->error_code = start.os_error ? start.os_error : (u32)start.error;
+	}, &process);
+	if (status.error) {
+		result->error_code = status.os_error ? status.os_error : (u32)status.error;
 		return false;
 	}
 	result->launched = true;
 	for (;;) {
-		while (append_process_pipe(&start.process, arena, false, &result->error_code)) {}
-		if (options.capture_stderr) while (append_process_pipe(&start.process, arena, true, &result->error_code)) {}
+		while (append_process_pipe(&process, arena, false, &result->error_code)) {}
+		if (options.capture_stderr) while (append_process_pipe(&process, arena, true, &result->error_code)) {}
 		if (result->error_code) goto failure;
-		wait = platform_wait_process(start.process, 1);
-		if (wait.status == PLATFORM_PROCESS_WAIT_COMPLETED) break;
-		if (wait.status == PLATFORM_PROCESS_WAIT_FAILED) {
-			result->error_code = wait.os_error ? wait.os_error : (u32)wait.error;
+		status = day_wait_process(process, 1, &completed, &exit_code);
+		if (status.error) {
+			result->error_code = status.os_error ? status.os_error : (u32)status.error;
 			goto failure;
 		}
+		if (completed) break;
 	}
-	while (append_process_pipe(&start.process, arena, false, &result->error_code)) {}
-	if (options.capture_stderr) while (append_process_pipe(&start.process, arena, true, &result->error_code)) {}
+	while (append_process_pipe(&process, arena, false, &result->error_code)) {}
+	if (options.capture_stderr) while (append_process_pipe(&process, arena, true, &result->error_code)) {}
 	if (result->error_code) goto failure;
-	result->exit_code = wait.exit_code;
+	result->exit_code = exit_code;
 	result->output.data = (char *)arena->data + mark;
 	result->output.size = arena->used - mark;
-	platform_close_process(&start.process);
+	day_close_process(&process);
 	return true;
 
 failure:
-	platform_close_process(&start.process);
+	day_close_process(&process);
 	arena_restore(arena, mark);
 	result->output = (String){0};
 	return false;
