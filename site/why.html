@@ -45,7 +45,7 @@
 
 		<p><strong>That is Manny’s job.</strong></p>
 
-		<p>The script creates tasks:</p>
+		<p><strong>This is Manny’s raw task description.</strong></p>
 
 		<div class="code-block">
 			<pre><code>elf.fs.<span class="call">create_directories</span>(<span class="string">"build"</span>)
@@ -74,17 +74,40 @@ entries.<span class="property">build</span> = <span class="keyword">fun</span>()
 <span class="keyword">ret</span> entries</code></pre>
 		</div>
 
-		<p>That is the model.</p>
+		<p>That is the core interface.</p>
 
 		<p>A task is a table. Dependencies are references to other tasks. The selected tasks become a graph. Manny executes that graph.</p>
 
-		<p>There is no hidden C project model in the middle. Manny does not need to understand your directory layout, decide what your targets should look like, or generate files for another build system to execute.</p>
+		<p>Manny has no executable target type. It has no static-library target type. It does not need to understand your directory layout, decide what your project should look like, or generate files for another build system to execute.</p>
 
 		<p>It receives the work and builds it.</p>
 
 		<p>Manny handles parallel execution, compiler-discovered dependencies, fingerprints, persistent state, interruption, failure propagation, and explaining why something rebuilt. The script remains free to generate the graph however it wants.</p>
 
-		<p>The bundled C helpers are just elf code that generates these same tables. They are convenient, not privileged. Use them, change them, replace them, or ignore them completely.</p>
+		<p>Writing every compile and link task by hand gets old, so I added a helper:</p>
+
+		<div class="code-block">
+			<pre><code><span class="variable">c</span> ::= manny.<span class="call">load</span>(<span class="string">"c"</span>)
+
+<span class="variable">hello</span> ::= c.<span class="call">executable</span>({
+	<span class="property">name</span> = <span class="string">"hello"</span>,
+	<span class="property">sources</span> = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
+})
+
+<span class="variable">entries</span> := {}
+
+entries.<span class="property">build</span> = <span class="keyword">fun</span>() {
+	<span class="keyword">ret</span> manny.<span class="call">build</span>({ <span class="property">targets</span> = { hello.task } })
+}
+
+<span class="keyword">ret</span> entries</code></pre>
+		</div>
+
+		<p><code>manny.load("c")</code> loads <code>c.elf</code>, an ordinary elf script shipped beside Manny. <code>c.executable()</code> loops over the sources, generates the raw compilation tasks, generates the link task, connects their dependencies, and gives the script that final task back.</p>
+
+		<p>The build engine does not know that <code>c.executable()</code> exists. There is no privileged C project system hiding underneath it. The helper produces the same tables I could have written by hand.</p>
+
+		<p>It is convenient, not mandatory. Use it, change it, replace it, or ignore it completely.</p>
 
 		<div class="statement">
 			<p>The build script gets to be arbitrary.</p>

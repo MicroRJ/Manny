@@ -258,6 +258,13 @@ footer a {
 	line-height: 1.65;
 }
 
+.article > p > code {
+	padding: 0.1em 0.3em;
+	border-radius: 4px;
+	background: var(--paper-deep);
+	font: 500 0.85em var(--mono);
+}
+
 .article > p {
 	margin: 28px 0;
 }
