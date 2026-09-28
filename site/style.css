@@ -165,22 +165,33 @@ pre {
 	tab-size: 4;
 }
 
-.variable,
+.example pre {
+	font-size: clamp(15px, 1.8vw, 18px);
+	line-height: 1.65;
+}
+
+.variable {
+	color: #713b29;
+	font-weight: 600;
+}
+
 .call {
-	color: #8f3e1c;
+	color: #b44820;
+	font-weight: 600;
 }
 
 .property {
-	color: #665046;
+	color: #5f493e;
 	font-weight: 600;
 }
 
 .keyword {
-	color: #a12f25;
+	color: #922e27;
+	font-weight: 600;
 }
 
 .string {
-	color: #536b45;
+	color: #42683f;
 }
 
 .terminal {
@@ -205,45 +216,33 @@ pre {
 }
 
 .guide-links {
-	display: grid;
-	grid-template-columns: 1fr;
+	display: block;
 }
 
 .guide-links a {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 7px 0;
-	font-size: 15px;
-}
-
-.guide-links i {
-	color: var(--orange-dark);
-	font-style: normal;
-	transition: transform 140ms ease;
-}
-
-.guide-links a:hover i,
-.guide-links a:focus-visible i {
-	transform: translateX(4px);
-}
-
-.guide {
-	position: sticky;
-	top: 30px;
-}
-
-.guide .section-heading {
 	display: block;
-	margin-bottom: 18px;
+	padding: 3px 0;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.5;
+	transition: color 140ms ease;
 }
 
-.guide .section-heading > p {
-	margin-bottom: 5px;
+.guide-links h2 {
+	margin: 0 0 7px;
+	color: var(--orange-dark);
+	font: 500 12px/1.4 var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 }
 
-.guide h2 {
-	font-size: 25px;
+.guide-links h2:not(:first-child) {
+	margin-top: 24px;
+}
+
+.guide-links a:hover,
+.guide-links a:focus-visible {
+	color: var(--orange-dark);
 }
 
 footer {
@@ -364,14 +363,6 @@ footer a {
 		gap: 80px;
 	}
 
-	.guide {
-		position: static;
-	}
-
-	.guide-links {
-		grid-template-columns: 1fr 1fr;
-		column-gap: 42px;
-	}
 }
 
 @media (max-width: 640px) {
@@ -398,12 +389,12 @@ footer a {
 		gap: 8px;
 	}
 
-	.guide-links {
-		grid-template-columns: 1fr;
-	}
-
 	pre {
 		font-size: 12px;
+	}
+
+	.example pre {
+		font-size: 14px;
 	}
 
 	.article {
@@ -431,7 +422,7 @@ footer a {
 
 	header a,
 	.actions a,
-	.guide-links i,
+	.guide-links a,
 	footer a {
 		transition: none;
 	}

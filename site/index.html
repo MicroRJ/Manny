@@ -34,26 +34,30 @@
 		</section>
 
 		<div class="content-layout">
-			<section class="example" aria-labelledby="example-title">
+			<section class="example">
 				<div class="section-heading">
 					<p>build.elf</p>
-					<h2 id="example-title">A complete build.</h2>
 				</div>
 
 				<div class="code-block">
-					<pre><code><span class="variable">c</span> ::= manny.<span class="call">load</span>(<span class="string">"c"</span>)
+					<pre><code><span class="variable">c</span> ::= <span class="variable">manny</span>.<span class="call">load</span>(<span class="string">"c"</span>)
 
 <span class="variable">hello</span> ::= c.<span class="call">executable</span>({
 	<span class="property">name</span> = <span class="string">"hello"</span>,
-	<span class="property">sources</span> = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
+	<span class="property">sources</span> = {
+		<span class="string">"main.c"</span>,
+		<span class="string">"message.c"</span>,
+	},
 })
 
 <span class="variable">entries</span> := {}
-entries.<span class="property">build</span> = <span class="keyword">fun</span>() {
-	<span class="keyword">ret</span> manny.<span class="call">build</span>({ <span class="property">targets</span> = { hello.task } })
+<span class="variable">entries</span>.<span class="property">build</span> = <span class="keyword">fun</span>() {
+	<span class="keyword">ret</span> <span class="variable">manny</span>.<span class="call">build</span>({
+		<span class="property">targets</span> = { <span class="variable">hello</span>.<span class="property">task</span> },
+	})
 }
 
-<span class="keyword">ret</span> entries</code></pre>
+<span class="keyword">ret</span> <span class="variable">entries</span></code></pre>
 				</div>
 
 				<div class="terminal">
@@ -66,19 +70,18 @@ entries.<span class="property">build</span> = <span class="keyword">fun</span>()
 				</div>
 			</section>
 
-			<aside class="guide" id="guide" aria-labelledby="guide-title">
-				<div class="section-heading">
-					<p>Documentation</p>
-					<h2 id="guide-title">Start here.</h2>
-				</div>
+			<aside class="guide" id="guide">
 				<nav class="guide-links" aria-label="Documentation">
-					<a href="why.html"><span>Why Manny?</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="getting-started.html"><span>Getting started</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="c.html"><span>C and C++ targets</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="tasks.html"><span>Tasks and dependencies</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="command-line.html"><span>Command line</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="embedding.html"><span>C library</span><i aria-hidden="true">&#8594;</i></a>
-					<a href="https://github.com/MicroRJ/Manny"><span>Source</span><i aria-hidden="true">&#8599;</i></a>
+					<h2>Guide</h2>
+					<a href="why.html">Why Manny?</a>
+					<a href="getting-started.html">Getting started</a>
+					<a href="c.html">C and C++ targets</a>
+					<a href="tasks.html">Tasks and dependencies</a>
+					<a href="command-line.html">Command line</a>
+					<a href="embedding.html">C library</a>
+
+					<h2>Project</h2>
+					<a href="https://github.com/MicroRJ/Manny">Source</a>
 				</nav>
 			</aside>
 		</div>
