@@ -17,55 +17,31 @@ b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
 
 b32 manny_platform_executable_path(Arena *arena, String *result)
 {
+	day_String_Result path;
 	if (!arena || !result) return false;
-	Platform_String_Result query = platform_get_executable_path(NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result filled = platform_get_executable_path(data, query.required_capacity);
-	if (filled.error || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	result->data = data;
-	result->size = filled.size;
+	path = day_get_executable_path(arena);
+	if (path.error) return false;
+	*result = path.value;
 	return true;
 }
 
 b32 manny_platform_current_directory(Arena *arena, String *result)
 {
+	day_String_Result path;
 	if (!arena || !result) return false;
-	Platform_String_Result query = platform_get_current_directory(NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result filled = platform_get_current_directory(data, query.required_capacity);
-	if (filled.error || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	result->data = data;
-	result->size = filled.size;
+	path = day_get_current_directory(arena);
+	if (path.error) return false;
+	*result = path.value;
 	return true;
 }
 
 b32 manny_platform_absolute_path(Arena *arena, String path, String *result)
 {
-	if (!arena || !result || !string_is_terminated(path)) return false;
-	Platform_String_Result query = platform_get_absolute_path(path.data, NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result filled = platform_get_absolute_path(path.data, data, query.required_capacity);
-	if (filled.error || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	result->data = data;
-	result->size = filled.size;
+	day_String_Result absolute;
+	if (!arena || !result) return false;
+	absolute = day_get_absolute_path(arena, path);
+	if (absolute.error) return false;
+	*result = absolute.value;
 	return true;
 }
 
@@ -112,7 +88,7 @@ b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 
 b32 manny_platform_create_directory(String path)
 {
-	return string_is_terminated(path) && platform_create_directory(path.data);
+	return day_create_directory(path).error == DAY_ERROR_NONE;
 }
 
 b32 manny_platform_executable_resolves(String name)
