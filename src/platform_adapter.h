@@ -33,7 +33,6 @@ b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 b32 manny_platform_create_directory(String path);
 b32 manny_platform_local_app_data(Arena *arena, String *result);
 b32 manny_platform_get_environment(String name, Arena *arena, String *value);
-b32 manny_platform_get_environment_block(Arena *arena, String *block);
 b32 manny_platform_set_environment(String name, String value);
 b32 manny_platform_executable_resolves(String string);
 b32 manny_platform_run_command(String command_line, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result);

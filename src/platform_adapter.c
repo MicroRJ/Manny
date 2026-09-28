@@ -82,47 +82,16 @@ b32 manny_platform_executable_resolves(String name)
 
 b32 manny_platform_get_environment(String name, Arena *arena, String *value)
 {
-	if (!string_is_terminated(name) || !arena || !value) return false;
-	*value = (String){0};
-	Platform_Environment_Result query = platform_get_environment(name.data, NULL, 0);
-	if (query.error) return false;
-	if (!query.found) return true;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_Environment_Result read = platform_get_environment(name.data, data, query.required_capacity);
-	if (read.error || !read.found || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	value->data = data;
-	value->size = read.size;
-	return true;
-}
-
-b32 manny_platform_get_environment_block(Arena *arena, String *block)
-{
-	if (!arena || !block) return false;
-	*block = (String){0};
-	Platform_String_Result query = platform_get_environment_block(NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result read = platform_get_environment_block(data, query.required_capacity);
-	if (read.error || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	block->data = data;
-	block->size = read.size;
-	return true;
+	day_Result result;
+	if (!arena || !value) return false;
+	result = day_get_env_field(arena, name, value);
+	return result.error == DAY_ERROR_NONE || result.error == DAY_ERROR_NOT_FOUND;
 }
 
 b32 manny_platform_set_environment(String name, String value)
 {
-	if (!string_is_terminated(name) || (value.data && !string_is_terminated(value))) return false;
-	return platform_set_environment(name.data, value.data).error == 0;
+	day_Result result = value.data ? day_set_env_field(name, value) : day_remove_env_field(name);
+	return result.error == DAY_ERROR_NONE;
 }
 
 b32 manny_platform_local_app_data(Arena *arena, String *result)
