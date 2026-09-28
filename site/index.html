@@ -11,67 +11,78 @@
 	<title>Manny</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-	<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+	<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="style.css">
 </head>
 <body>
-	<nav class="utilities" aria-label="Project links">
-		<a href="https://github.com/MicroRJ/Manny" aria-label="GitHub" title="GitHub">
-			<svg viewBox="0 0 24 24" aria-hidden="true">
-				<path d="M12 2C6.48 2 2 6.58 2 12.23c0 4.52 2.87 8.35 6.84 9.71.5.1.68-.22.68-.49v-1.91c-2.78.62-3.37-1.21-3.37-1.21-.45-1.18-1.11-1.49-1.11-1.49-.91-.63.07-.62.07-.62 1 .08 1.53 1.06 1.53 1.06.9 1.56 2.35 1.11 2.92.85.09-.66.35-1.11.63-1.36-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05A9.35 9.35 0 0 1 12 6.96a9.3 9.3 0 0 1 2.5.34c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.93-2.34 4.79-4.57 5.04.36.32.68.94.68 1.89v2.81c0 .27.18.59.69.49A10.23 10.23 0 0 0 22 12.23C22 6.58 17.52 2 12 2Z" />
-			</svg>
-		</a>
-	</nav>
+	<header>
+		<nav aria-label="Project links">
+			<a href="#guide">Guide</a>
+			<a href="https://github.com/MicroRJ/Manny">GitHub</a>
+		</nav>
+	</header>
 
 	<main>
-		<section class="hero" id="home">
-			<h1>MANNY</h1>
-			<a class="next" href="#build">docs <span aria-hidden="true">&#8595;</span></a>
-		</section>
-
-		<section class="build" id="build">
-			<div class="build-content">
-				<div class="script">
-					<p class="filename">build.elf</p>
-					<pre><code><span class="name">c</span> ::= manny.load(<span class="string">"c"</span>)
-
-<span class="name">hello</span> ::= c.executable({
-	name = <span class="string">"hello"</span>,
-	sources = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
-	private_include_directories = { <span class="string">"include"</span> },
-})
-
-entries := {}
-entries.build = <span class="keyword">fun</span>() {
-	<span class="keyword">ret</span> manny.build({ targets = { hello.task } })
-}
-
-<span class="keyword">ret</span> entries</code></pre>
-				</div>
-
-				<div class="output">
-					<p class="filename">manny</p>
-					<pre><code><span class="muted">&gt;</span> manny<span class="cursor" aria-hidden="true"></span>
-
-<span class="muted">[1/3 succeeded]</span> compile hello: main.c
-<span class="muted">[2/3 succeeded]</span> compile hello: message.c
-<span class="muted">[3/3 succeeded]</span> link hello</code></pre>
-				</div>
+		<section class="intro">
+			<h1>Manny</h1>
+			<p class="summary">A small hackable build system for C and C++.</p>
+			<div class="actions">
+				<a class="download" href="https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev">Download 0.3.0-dev <span aria-hidden="true">&#8595;</span></a>
+				<a href="https://github.com/MicroRJ/Manny#readme">Read the README <span aria-hidden="true">&#8594;</span></a>
 			</div>
 		</section>
 
-		<section class="docs" id="docs">
-			<h2>DOCUMENTATION</h2>
-			<nav class="docs-index" aria-label="Documentation">
-				<a href="https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev"><strong>Download</strong><i aria-hidden="true">&#8599;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#getting-started"><strong>Getting started</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><strong>C and C++ targets</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#the-model"><strong>Tasks and dependencies</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#command-line"><strong>Command line</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><strong>C library</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny"><strong>Source</strong><i aria-hidden="true">&#8599;</i></a>
+		<section class="example" aria-labelledby="example-title">
+			<div class="section-heading">
+				<p>build.elf</p>
+				<h2 id="example-title">A complete build.</h2>
+			</div>
+
+			<div class="code-block">
+				<pre><code><span class="variable">c</span> ::= manny.<span class="call">load</span>(<span class="string">"c"</span>)
+
+<span class="variable">hello</span> ::= c.<span class="call">executable</span>({
+	<span class="property">name</span> = <span class="string">"hello"</span>,
+	<span class="property">sources</span> = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
+})
+
+<span class="variable">entries</span> := {}
+entries.<span class="property">build</span> = <span class="keyword">fun</span>() {
+	<span class="keyword">ret</span> manny.<span class="call">build</span>({ <span class="property">targets</span> = { hello.task } })
+}
+
+<span class="keyword">ret</span> entries</code></pre>
+			</div>
+
+			<div class="terminal">
+				<p>manny</p>
+				<pre><code><span class="prompt">&gt;</span> manny
+
+<span class="progress">[1/3 succeeded]</span> compile hello: main.c
+<span class="progress">[2/3 succeeded]</span> compile hello: message.c
+<span class="progress">[3/3 succeeded]</span> link hello</code></pre>
+			</div>
+		</section>
+
+		<section class="guide" id="guide" aria-labelledby="guide-title">
+			<div class="section-heading">
+				<p>Documentation</p>
+				<h2 id="guide-title">Start here.</h2>
+			</div>
+			<nav class="guide-links" aria-label="Documentation">
+				<a href="https://github.com/MicroRJ/Manny#getting-started"><span>Getting started</span><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><span>C and C++ targets</span><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny#the-model"><span>Tasks and dependencies</span><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny#command-line"><span>Command line</span><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><span>C library</span><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny"><span>Source</span><i aria-hidden="true">&#8599;</i></a>
 			</nav>
 		</section>
 	</main>
+
+	<footer>
+		<p>Manny lives <a href="https://github.com/MicroRJ/Manny">on GitHub</a>.</p>
+		<p>0.3.0-dev</p>
+	</footer>
 </body>
 </html>
