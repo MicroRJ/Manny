@@ -249,6 +249,9 @@ run_stress_tests := {
 	dependencies = { build_stress_tests },
 }
 
+site_targets := elf.load_file("site/site.elf")
+elf.assert(elf.type_of(site_targets) == "table", "site/site.elf must return its targets")
+
 options := {
 	workers   = 4,
 	verbosity = 0,
@@ -273,6 +276,13 @@ entries.test = fun() {
 entries.stress = fun() {
 	ret manny.build({
 		targets = { run_stress_tests },
+		options = options,
+	})
+}
+
+entries.site = fun() {
+	ret manny.build({
+		targets = site_targets,
 		options = options,
 	})
 }

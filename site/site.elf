@@ -1,0 +1,42 @@
+prepare := {
+	name = "prepare website directory",
+	command_line = "cmd /c if not exist build\\site mkdir build\\site",
+	inputs = {},
+	outputs = { "build/site" },
+	include_dirs = {},
+	dependencies = {},
+}
+
+targets := {}
+for asset := { "index.html", "style.css", ".nojekyll" }[...] ? {
+	copy := {
+		name = f"copy website asset ${asset}",
+		command_line = f"cmd /d /c copy /Y site\\${asset} build\\site\\${asset} >nul",
+		inputs = { f"site/${asset}" },
+		outputs = { f"build/site/${asset}" },
+		include_dirs = {},
+		dependencies = { prepare },
+	}
+	targets:add(copy)
+}
+
+documentation_paths := elf.fs.get_paths("docs")
+elf.assert(elf.type_of(documentation_paths) == "table", "could not list documentation sources")
+
+for source := documentation_paths[...] ? {
+	if source:ends_with(".md") ? {
+		name := source:slice(5, -3)
+		output := f"build/site/${name}.html"
+		generate := {
+			name = f"generate ${name} documentation",
+			command_line = f"pandoc ${source} --from=gfm+yaml_metadata_block --to=html5 --standalone --syntax-highlighting=none --wrap=none --template=site/article.html --output=${output}",
+			inputs = { source, "site/article.html", "site/style.css" },
+			outputs = { output },
+			include_dirs = {},
+			dependencies = { prepare },
+		}
+		targets:add(generate)
+	}
+}
+
+ret targets
