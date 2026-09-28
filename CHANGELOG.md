@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-28
+
+- Added `c.elf`, a high-level C and C++ target layer for executables, static
+  libraries, generated files, tests, and public/private usage requirements. The
+  helpers generate ordinary Manny tasks and preserve access to the raw graph.
+
 ## 2026-09-27
 
 - Renamed Bob to Manny. The executable, C API, elf library, build state, packaging, examples, and project files now use the Manny name.

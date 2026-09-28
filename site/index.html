@@ -29,23 +29,19 @@
 			<div class="build-content">
 				<div class="script">
 					<p class="filename">build.elf</p>
-					<pre><code><span class="name">compile</span> := {
-	name = <span class="string">"compile main"</span>,
-	command_line = <span class="string">"clang-cl /c main.c /Fobuild\\main.obj"</span>,
-	inputs = { <span class="string">"main.c"</span> },
-	outputs = { <span class="string">"build/main.obj"</span> },
-}
+					<pre><code><span class="name">c_module</span> ::= elf.load_file(<span class="string">"c.elf"</span>)
+<span class="name">c</span> ::= c_module.configure({
+	compile_options = { <span class="string">"/W4"</span> },
+})
 
-<span class="name">link</span> := {
-	name = <span class="string">"link hello"</span>,
-	command_line = <span class="string">"clang-cl build\\main.obj /Febuild\\hello.exe"</span>,
-	inputs = { <span class="string">"build/main.obj"</span> },
-	outputs = { <span class="string">"build/hello.exe"</span> },
-	dependencies = { compile },
-}
+<span class="name">hello</span> ::= c.executable({
+	name = <span class="string">"hello"</span>,
+	sources = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
+	private_include_directories = { <span class="string">"include"</span> },
+})
 
 entries.build = <span class="keyword">fun</span>() {
-	<span class="keyword">ret</span> manny.build({ targets = { link } })
+	<span class="keyword">ret</span> manny.build({ targets = { hello.task } })
 }</code></pre>
 				</div>
 
@@ -53,8 +49,9 @@ entries.build = <span class="keyword">fun</span>() {
 					<p class="filename">manny</p>
 					<pre><code><span class="muted">&gt;</span> manny<span class="cursor" aria-hidden="true"></span>
 
-<span class="muted">[1/2 succeeded]</span> compile main
-<span class="muted">[2/2 succeeded]</span> link hello</code></pre>
+<span class="muted">[1/3 succeeded]</span> compile hello: main.c
+<span class="muted">[2/3 succeeded]</span> compile hello: message.c
+<span class="muted">[3/3 succeeded]</span> link hello</code></pre>
 				</div>
 			</div>
 		</section>
@@ -63,7 +60,7 @@ entries.build = <span class="keyword">fun</span>() {
 			<h2>DOCUMENTATION</h2>
 			<nav class="docs-index" aria-label="Documentation">
 				<a href="https://github.com/MicroRJ/Manny#getting-started"><strong>Getting started</strong><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#a-build"><strong>Build scripts</strong><i aria-hidden="true">&#8594;</i></a>
+				<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><strong>C and C++ targets</strong><i aria-hidden="true">&#8594;</i></a>
 				<a href="https://github.com/MicroRJ/Manny#the-model"><strong>Tasks and dependencies</strong><i aria-hidden="true">&#8594;</i></a>
 				<a href="https://github.com/MicroRJ/Manny#command-line"><strong>Command line</strong><i aria-hidden="true">&#8594;</i></a>
 				<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><strong>C library</strong><i aria-hidden="true">&#8594;</i></a>

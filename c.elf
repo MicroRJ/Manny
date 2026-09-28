@@ -1,0 +1,303 @@
+// C and C++ targets built on Manny's task graph.
+
+configure ::= fun(options) {
+	options = options ?? {}
+	style ::= options.style ?? "msvc"
+	elf.assert(style == "msvc" || style == "gnu", "c.configure: style must be 'msvc' or 'gnu'")
+
+	default_compiler := "cc"
+	default_archiver := "ar"
+	default_executable_suffix := ""
+	object_suffix := ".o"
+	if style == "msvc" ? {
+		default_compiler = "clang-cl"
+		default_archiver = "lib"
+		default_executable_suffix = ".exe"
+		object_suffix = ".obj"
+	}
+	compiler ::= options.compiler ?? default_compiler
+	archiver ::= options.archiver ?? default_archiver
+	output_directory ::= options.output_directory ?? "build"
+	common_compile_options ::= options.compile_options ?? {}
+	common_link_options ::= options.link_options ?? {}
+	executable_suffix ::= options.executable_suffix ?? default_executable_suffix
+
+	elf.assert(elf.fs.create_directories(output_directory), f"c.configure: could not create '${output_directory}'")
+
+	quote ::= fun(value) ret f"\"${value}\""
+
+	append_options ::= fun(command, values) {
+		if values:length() ? ret f"${command} ${" ":join(values)}"
+		ret command
+	}
+
+	append_includes ::= fun(command, values) {
+		prefix := "-I"
+		if style == "msvc" ? { prefix = "/I" }
+		for value := values[...] ? { command += f" ${prefix}${quote(value)}" }
+		ret command
+	}
+
+	append_defines ::= fun(command, values) {
+		prefix := "-D"
+		if style == "msvc" ? { prefix = "/D" }
+		for value := values[...] ? { command += f" ${prefix}${value}" }
+		ret command
+	}
+
+	append_quoted ::= fun(command, values) {
+		for value := values[...] ? { command += f" ${quote(value)}" }
+		ret command
+	}
+
+	path_directory ::= fun(path) {
+		parts := path:replace("\\", "/"):split("/")
+		parts:pop()
+		if parts:length() == 0 ? ret "."
+		ret "/":join(parts)
+	}
+
+	object_name ::= fun(source, index) {
+		name := source:replace("\\", "_"):replace("/", "_"):replace(":", "_"):replace(".", "_")
+		ret f"${index}_${name}${object_suffix}"
+	}
+
+	dependency_usage ::= fun(dependencies) {
+		include_directories := {}
+		defines := {}
+		compile_options := {}
+		link_options := {}
+		libraries := {}
+		tasks := {}
+
+		for dependency := dependencies[...] ? {
+			elf.assert(elf.type_of(dependency) == "table" && elf.type_of(dependency.task) == "table",
+				"C target dependencies must contain targets")
+			include_directories:extend(dependency.usage.include_directories)
+			defines:extend(dependency.usage.defines)
+			compile_options:extend(dependency.usage.compile_options)
+			link_options:extend(dependency.usage.link_options)
+			libraries:extend(dependency.usage.libraries)
+			tasks:add(dependency.task)
+		}
+
+		ret {
+			include_directories = include_directories,
+			defines = defines,
+			compile_options = compile_options,
+			link_options = link_options,
+			libraries = libraries,
+			tasks = tasks,
+		}
+	}
+
+	compile_sources ::= fun(name, sources, description, dependency_info) {
+		elf.assert(elf.type_of(sources) == "table", f"c target '${name}' requires a sources table")
+		object_directory := f"${output_directory}/obj/${name}"
+		elf.assert(elf.fs.create_directories(object_directory), f"could not create '${object_directory}'")
+
+		private_includes := description.private_include_directories ?? {}
+		public_includes := description.public_include_directories ?? {}
+		includes := private_includes:clone():extend(public_includes, dependency_info.include_directories)
+		defines := (description.defines ?? {}):clone():extend(description.public_defines ?? {}, dependency_info.defines)
+		compile_options := common_compile_options:clone():extend(description.compile_options ?? {}, description.public_compile_options ?? {}, dependency_info.compile_options)
+		target_generated_inputs := description.generated_inputs ?? {}
+
+		objects := {}
+		tasks := {}
+		index := 0
+		for source := sources[...] ? {
+			source_path := source
+			generated_inputs := target_generated_inputs:clone()
+			if elf.is_string(source) == false ? {
+				elf.assert(elf.type_of(source) == "table", f"invalid source in target '${name}'")
+				source_path = source.path
+				if source.kind == "generated_file" ? { generated_inputs:add(source) }
+				generated_inputs:extend(source.generated_inputs ?? {})
+			}
+			elf.assert(elf.is_string(source_path), f"invalid source path in target '${name}'")
+
+			generated_paths := generated_inputs:map(fun(generated) ret generated.path)
+			generated_tasks := generated_inputs:map(fun(generated) ret generated.task)
+			generated_includes := generated_paths:map(fun(path) ret path_directory(path))
+			source_includes := includes:clone():extend(generated_includes)
+			object := f"${object_directory}/${object_name(source_path, index)}"
+
+			command := quote(compiler)
+			if style == "msvc" ? { command += " /nologo" }
+			command = append_options(command, compile_options)
+			command = append_defines(command, defines)
+			command = append_includes(command, source_includes)
+			if style == "msvc" ? { command += f" /c ${quote(source_path)} /Fo${quote(object)}" }
+			else { command += f" -c ${quote(source_path)} -o ${quote(object)}" }
+
+			task := {
+				name = f"compile ${name}: ${source_path}",
+				command_line = command,
+				inputs = { source_path }:extend(generated_paths),
+				outputs = { object },
+				include_dirs = source_includes,
+				dependencies = generated_tasks,
+			}
+			objects:add(object)
+			tasks:add(task)
+			index += 1
+		}
+
+		ret { objects = objects, tasks = tasks }
+	}
+
+	static_library := fun(description) {
+		name := description.name
+		elf.assert(elf.is_string(name), "c.static_library requires a name")
+		dependencies := description.dependencies ?? {}
+		dependency_info := dependency_usage(dependencies)
+		compiled := compile_sources(name, description.sources, description, dependency_info)
+		output := f"${output_directory}/lib${name}.a"
+		if style == "msvc" ? { output = f"${output_directory}/${name}.lib" }
+
+		command := quote(archiver)
+		if style == "msvc" ? { command += f" /nologo /OUT:${quote(output)}" }
+		else { command += " rcs" }
+		if style == "msvc" ? { command = append_quoted(command, compiled.objects) }
+		else {
+			command += f" ${quote(output)}"
+			command = append_quoted(command, compiled.objects)
+		}
+
+		task := {
+			name = f"archive ${name}",
+			command_line = command,
+			inputs = compiled.objects,
+			outputs = { output },
+			include_dirs = {},
+			dependencies = compiled.tasks:clone():extend(dependency_info.tasks),
+		}
+
+		ret {
+			name = name,
+			kind = "static_library",
+			output = output,
+			task = task,
+			usage = {
+				include_directories = (description.public_include_directories ?? {}):clone():extend(dependency_info.include_directories),
+				defines = (description.public_defines ?? {}):clone():extend(dependency_info.defines),
+				compile_options = (description.public_compile_options ?? {}):clone():extend(dependency_info.compile_options),
+				link_options = (description.public_link_options ?? {}):clone():extend(dependency_info.link_options),
+				libraries = { output }:extend(dependency_info.libraries),
+			},
+		}
+	}
+
+	executable := fun(description) {
+		name := description.name
+		elf.assert(elf.is_string(name), "c.executable requires a name")
+		dependencies := description.dependencies ?? {}
+		dependency_info := dependency_usage(dependencies)
+		compiled := compile_sources(name, description.sources, description, dependency_info)
+		output := f"${output_directory}/${name}${executable_suffix}"
+		link_options := common_link_options:clone():extend(description.link_options ?? {}, dependency_info.link_options)
+		link_inputs := compiled.objects:clone():extend(dependency_info.libraries)
+
+		command := append_quoted(quote(compiler), link_inputs)
+		if style == "msvc" ? {
+			command += f" /Fe${quote(output)}"
+			if link_options:length() ? { command = append_options(f"${command} /link", link_options) }
+		}
+		else {
+			command = append_options(command, link_options)
+			command += f" -o ${quote(output)}"
+		}
+
+		task := {
+			name = f"link ${name}",
+			command_line = command,
+			inputs = link_inputs,
+			outputs = { output },
+			include_dirs = {},
+			dependencies = compiled.tasks:clone():extend(dependency_info.tasks),
+		}
+
+		ret {
+			name = name,
+			kind = "executable",
+			output = output,
+			task = task,
+			usage = {
+				include_directories = {},
+				defines = {},
+				compile_options = {},
+				link_options = {},
+				libraries = {},
+			},
+		}
+	}
+
+	generated_file := fun(description) {
+		elf.assert(elf.is_string(description.name), "c.generated_file requires a name")
+		elf.assert(elf.is_string(description.output), "c.generated_file requires an output")
+		program := description.program
+		program_path := program
+		dependencies := (description.dependencies ?? {}):clone()
+		inputs := (description.inputs ?? {}):clone()
+		if elf.is_string(program) == false ? {
+			elf.assert(elf.type_of(program) == "table" && elf.is_string(program.output), "generated file program must be a path or executable target")
+			program_path = program.output
+			dependencies:add(program.task)
+			inputs:add(program.output)
+		}
+
+		output := f"${output_directory}/${description.output}"
+		elf.assert(elf.fs.create_directories(path_directory(output)), f"could not create output directory for '${output}'")
+		arguments := description.arguments ?? {}
+		argument_type := elf.type_of(arguments)
+		if argument_type == "function" || argument_type == "closure" ? { arguments = arguments(output) }
+		elf.assert(elf.type_of(arguments) == "table", "generated file arguments must be a table or function")
+		command := append_quoted(quote(program_path), arguments)
+
+		task := {
+			name = description.name,
+			command_line = command,
+			inputs = inputs,
+			outputs = { output },
+			include_dirs = {},
+			dependencies = dependencies,
+		}
+		ret { kind = "generated_file", path = output, output = output, task = task }
+	}
+
+	run := fun(description) {
+		target := description.target
+		elf.assert(elf.type_of(target) == "table" && target.kind == "executable", "c.run requires an executable target")
+		arguments := description.arguments ?? {}
+		ret {
+			name = description.name ?? f"run ${target.name}",
+			command_line = append_quoted(quote(target.output), arguments),
+			inputs = { target.output },
+			outputs = {},
+			include_dirs = {},
+			dependencies = { target.task },
+		}
+	}
+
+	test := fun(description) {
+		target := executable(description)
+		ret {
+			name = target.name,
+			kind = "test",
+			output = target.output,
+			build_task = target.task,
+			task = run({ target = target, name = f"test ${target.name}", arguments = description.arguments ?? {} }),
+		}
+	}
+
+	ret {
+		static_library = static_library,
+		executable = executable,
+		generated_file = generated_file,
+		run = run,
+		test = test,
+	}
+}
+
+ret { configure = configure }

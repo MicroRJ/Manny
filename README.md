@@ -1,44 +1,38 @@
-# Bob
+# Manny
 
-> Bob, Builds.
+> Manny builds.
 
-Bob is a small programmable build system for C.
+Manny is a small programmable build system for C.
 
 Build scripts are ordinary [elf](https://github.com/MicroRJ/elf) programs. They
-generate a graph of tasks, and Bob executes that graph in parallel, tracks
+generate a graph of tasks, and Manny executes that graph in parallel, tracks
 compiler-discovered dependencies, and explains why something rebuilt.
 
 The graph executor is also a C library. The elf frontend is one way to drive
-Bob; it is not the architecture Bob is trapped inside.
+Manny; it is not the architecture Manny is trapped inside.
 
-Bob is currently in early development. The supported host is Windows x64, and
+Manny is currently in early development. The supported host is Windows x64, and
 the public API and build-state format may still change.
 
 ## A build
 
 ```elf
-elf.fs.create_directory("build")
+c_module ::= elf.load_file("c.elf")
+c ::= c_module.configure({
+	compile_options = { "/W4" },
+})
 
-compile := {
-	name = "compile main",
-	command_line = "clang-cl /nologo /c main.c /Fobuild\\main.obj",
-	inputs = { "main.c" },
-	outputs = { "build/main.obj" },
-}
-
-link := {
-	name = "link hello",
-	command_line = "clang-cl /nologo build\\main.obj /Febuild\\hello.exe",
-	inputs = { "build/main.obj" },
-	outputs = { "build/hello.exe" },
-	dependencies = { compile },
-}
+hello ::= c.executable({
+	name = "hello",
+	sources = { "main.c", "message.c" },
+	private_include_directories = { "include" },
+})
 
 entries := {}
 
 entries.build = fun() {
-	ret bob.build({
-		targets = { link },
+	ret manny.build({
+		targets = { hello.task },
 		options = { workers = 4 },
 	})
 }
@@ -46,52 +40,63 @@ entries.build = fun() {
 ret entries
 ```
 
-Save that as `build.elf`, then run Bob:
+Save that as `build.elf`, then run Manny:
 
 ```text
-> bob
-[1/2 succeeded] compile main
-[2/2 succeeded] link hello
+> manny
+[1/3 succeeded] compile hello: main.c
+[2/3 succeeded] compile hello: message.c
+[3/3 succeeded] link hello
 
-> bob
-[1/2 up-to-date] compile main
-[2/2 up-to-date] link hello
+> manny
+[1/3 up-to-date] compile hello: main.c
+[2/3 up-to-date] compile hello: message.c
+[3/3 up-to-date] link hello
 ```
 
-Ask Bob why it made the current incremental decision:
+Ask Manny why it made the current incremental decision:
 
 ```text
-> bob --explain
-[explain] compile main: inputs are not newer than outputs
-[1/2 up-to-date] compile main
+> manny --explain
+[explain] compile hello: main.c: inputs are not newer than outputs
+[1/3 up-to-date] compile hello: main.c
+[explain] compile hello: message.c: inputs are not newer than outputs
+[2/3 up-to-date] compile hello: message.c
 [explain] link hello: inputs are not newer than outputs
-[2/2 up-to-date] link hello
+[3/3 up-to-date] link hello
 ```
 
-`bob` runs the `build` entry by default. A script can expose any entries it
+`c.elf` provides C and C++ executables, static libraries, generated files, tests,
+and public/private usage requirements. It only generates regular Manny tasks;
+drop down to raw task tables whenever a build needs something unusual. See the
+[C target guide](docs/c.md).
+
+`manny` runs the `build` entry by default. A script can expose any entries it
 wants:
 
 ```text
-bob
-bob build
-bob run
-bob clean
-bob rant_about_how_much_i_hate_build_systems
+manny
+manny build
+manny run
+manny clean
+manny rant_about_how_much_i_hate_build_systems
 ```
 
 An entry is just an elf function. It can construct a graph, generate files,
 call other scripts, remove a directory, print something stupid, or do whatever
 else the build needs.
 
-## Why Bob?
+## Why Manny?
 
 - **The build is a program.** Use functions, loops, tables, closures, string
   interpolation, and modules instead of fighting a deliberately weak DSL.
 - **Tasks are plain data.** Generate them, transform them, combine subprojects,
-  and pass the resulting graph to `bob.build()`.
-- **Dependencies create parallelism.** Bob schedules ready tasks across worker
+  and pass the resulting graph to `manny.build()`.
+- **Common C builds stay small.** The bundled `c.elf` module handles ordinary
+  compile, archive, link, generated-source, and test plumbing.
+- **Dependencies create parallelism.** Manny schedules ready tasks across worker
   threads while respecting the graph.
-- **The compiler tells Bob about headers.** Bob consumes compiler-generated
+- **The compiler tells Manny about headers.** Manny consumes compiler-generated
   dependency files instead of trying to understand C with an include scanner.
 - **Incremental decisions include configuration.** BLAKE3 fingerprints cover
   commands, working directories, normalized paths, and relevant task flags.
@@ -99,7 +104,7 @@ else the build needs.
   appended as the build runs and compacted into a checksummed binary snapshot.
 - **Rebuilds are explainable.** `--explain` reports why a task ran or remained
   up to date.
-- **The executor is a library.** C programs can construct a generic Bob graph,
+- **The executor is a library.** C programs can construct a generic Manny graph,
   attach callbacks to nodes, and execute it without using the build frontend.
 
 ## The model
@@ -114,15 +119,15 @@ A build task has:
 - optional metadata such as include directories and transparency.
 
 Tasks form a directed acyclic graph. A task becomes ready after its dependencies
-finish. Bob runs ready tasks concurrently, blocks dependents when a dependency
+finish. Manny runs ready tasks concurrently, blocks dependents when a dependency
 fails, and finishes when every reachable task is terminal.
 
-For incremental builds, Bob normalizes and interns paths, records dependencies
+For incremental builds, Manny normalizes and interns paths, records dependencies
 reported by the compiler, fingerprints the task description, and stores the
-result under `.bob/state` in the build root.
+result under `.manny/state` in the build root.
 
 That is the core of it. Generate the task table however you want, then give it
-to Bob.
+to Manny.
 
 ## Getting started
 
@@ -133,65 +138,69 @@ Requirements:
 - `clang-cl` available from the command line
 - Git with submodule support
 
-Clone Bob and its dependencies:
+Clone Manny and its dependencies:
 
 ```bat
-git clone --recursive https://github.com/MicroRJ/Bob.git
-cd Bob
+git clone --recursive https://github.com/MicroRJ/Manny.git
+cd Manny
 ```
 
-Build Bob using its checked-in blessed executable:
+Build Manny using its checked-in blessed executable:
 
 ```bat
 build.bat
 ```
 
-The new executable is written to `build\bob.exe`.
+The new executable is written to `build\manny.exe`.
 
 Try the included example:
 
 ```bat
 cd example
-..\build\bob.exe
-..\build\bob.exe run
-..\build\bob.exe --explain
+..\build\manny.exe
+..\build\manny.exe run
+..\build\manny.exe --explain
 ```
 
 The example's generated files live under `example\build`, and its persistent
-incremental state lives under `example\.bob`.
+incremental state lives under `example\.manny`.
+
+For a new project, place [`c.elf`](c.elf) beside `build.elf`, copy the opening
+example, and change the source list. The low-level task format remains available
+for custom tools and non-C work.
 
 ## Command line
 
 ```text
-bob [build-file] [entry] [options]
+manny [build-file] [entry] [options]
 ```
 
-Bob uses `build.elf` and the `build` entry when neither is specified.
+Manny uses `build.elf` and the `build` entry when neither is specified.
 
 ```text
 -q, --quiet          Suppress task output.
 --explain            Explain incremental decisions.
---verbose [N]        Control Bob's internal diagnostic verbosity.
+--verbose [N]        Control Manny's internal diagnostic verbosity.
 --workers N          Set the worker count.
 --profile            Write profiling information.
 --profile-threads    Include worker-thread profiling.
---version            Print Bob and elf versions.
+--version            Print Manny and elf versions.
 ```
 
-Verbosity controls Bob's own diagnostics. Task output is printed by default and
+Verbosity controls Manny's own diagnostics. Task output is printed by default and
 is controlled separately by `--quiet`.
 
 ## As a C library
 
-The abstract heart of Bob is independent of command lines and files. A `Bob`
+The abstract heart of Manny is independent of command lines and files. A `Manny`
 contains nodes and dependency edges. Each node has a callback, user data, and a
-result. `bob_execute()` runs the graph using the requested worker count and can
+result. `manny_execute()` runs the graph using the requested worker count and can
 report start and completion events to the host.
 
 The build layer sits on top of that executor and adds processes, inputs,
 outputs, fingerprints, compiler dependencies, and persistent state.
 
-This separation is intentional. Bob can be used as a build-system runner, as a
+This separation is intentional. Manny can be used as a build-system runner, as a
 graph execution library embedded in another C program, or through a different
 frontend in the future.
 
@@ -216,12 +225,12 @@ They tend to have at least one of these problems:
 3. They are merely scripts, so I have to implement the entire build system
    myself in a scripting language I do not particularly like.
 
-Bob uses a normal, minimal, general-purpose, C-like programming language. The
-script calls `bob.build()` with a table of targets. Bob takes those targets,
+Manny uses a normal, minimal, general-purpose, C-like programming language. The
+script calls `manny.build()` with a table of targets. Manny takes those targets,
 constructs the graph, tracks what changed, and builds it.
 
 Generate the table however you want.
 
 That's freaking it.
 
-It's just Bob.
+It's just Manny.

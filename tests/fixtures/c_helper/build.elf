@@ -1,0 +1,44 @@
+c_module ::= elf.load_file("../../../c.elf")
+c ::= c_module.configure({ compile_options = { "/W4", "/WX" } })
+
+codegen ::= c.executable({
+	name = "codegen",
+	sources = { "codegen.c" },
+})
+
+generated ::= c.generated_file({
+	name = "generate value header",
+	program = codegen,
+	output = "generated/value.h",
+	arguments = fun(output) {
+		ret { output }
+	},
+})
+
+fixture ::= c.static_library({
+	name = "fixture",
+	sources = {
+		{
+			path = "fixture.c",
+			generated_inputs = { generated },
+		},
+	},
+	public_include_directories = { "include" },
+})
+
+app ::= c.executable({
+	name = "fixture_app",
+	sources = { "main.c" },
+	dependencies = { fixture },
+})
+
+tests ::= c.test({
+	name = "fixture_tests",
+	sources = { "fixture_test.c" },
+	dependencies = { fixture },
+})
+
+entries := {}
+entries.build = fun() ret manny.build({ targets = { app.task } })
+entries.test = fun() ret manny.build({ targets = { tests.task } })
+ret entries

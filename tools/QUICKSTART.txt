@@ -6,21 +6,23 @@ Requirements
     Visual Studio C++ build tools
     clang-cl available from the command line
 
-From this directory, run:
+From the unpacked release directory, run:
 
-    ..\build\manny.exe
+    cd hello
+    ..\manny.exe
 
-Manny compiles and links the example in parallel where possible. Run it with:
+Manny compiles and links the example. Run it with:
 
-    ..\build\manny.exe run
+    ..\manny.exe run
 
 Run the build again to see the no-op case:
 
-    ..\build\manny.exe
+    ..\manny.exe
 
 Then edit message.h or message.c and ask Manny to explain the next build:
 
-    ..\build\manny.exe --explain
+    ..\manny.exe --explain
 
 The build description is build.elf. Manny's persistent incremental state lives
-in .manny/state, and generated files live in build/.
+in .manny/state, generated files live in build, and the C target helpers live in
+..\c.elf.

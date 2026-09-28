@@ -1,34 +1,22 @@
 
-elf.fs.create_directory("build")
+c_module ::= elf.load_file("../c.elf")
+c ::= c_module.configure({
+	compile_options = { "/W4" },
+})
 
-object_task ::= fun(name) {
-	ret {
-		name         = f"compile ${name}",
-		command_line = f"clang-cl /nologo /W4 /c ${name}.c /Fobuild\\${name}.obj",
-		inputs       = { f"${name}.c" },
-		outputs      = { f"build/${name}.obj" },
-		include_dirs = { "." },
-	}
-}
+message ::= c.static_library({
+	name = "message",
+	sources = { "message.c" },
+	public_include_directories = { "." },
+})
 
-compile_main    ::= object_task("main")
-compile_message ::= object_task("message")
+hello ::= c.executable({
+	name = "hello",
+	sources = { "main.c" },
+	dependencies = { message },
+})
 
-link := {
-	name = "link hello",
-	command_line = "clang-cl /nologo build\\main.obj build\\message.obj /Febuild\\hello.exe",
-	inputs = { "build/main.obj", "build/message.obj" },
-	outputs = { "build/hello.exe" },
-	dependencies = { compile_main, compile_message },
-}
-
-run := {
-	name = "run hello",
-	command_line = "build\\hello.exe",
-	inputs = { "build/hello.exe" },
-	outputs = {},
-	dependencies = { link },
-}
+run ::= c.run({ target = hello })
 
 options := {
 	workers = 4,
@@ -39,7 +27,7 @@ entries := {}
 
 entries.build = fun() {
 	ret manny.build({
-		targets = { link },
+		targets = { hello.task },
 		options = options,
 	})
 }

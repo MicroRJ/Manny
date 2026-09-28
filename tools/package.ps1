@@ -12,6 +12,8 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $mannyExecutable = Join-Path $repositoryRoot "blessed\manny.exe"
 $licenseFile = Join-Path $repositoryRoot "LICENSE"
 $exampleRoot = Join-Path $repositoryRoot "example"
+$cModule = Join-Path $repositoryRoot "c.elf"
+$quickStart = Join-Path $PSScriptRoot "QUICKSTART.txt"
 $distributionRoot = Join-Path $repositoryRoot "dist"
 
 if (-not (Test-Path -LiteralPath $mannyExecutable -PathType Leaf)) {
@@ -55,7 +57,8 @@ $null = New-Item -ItemType Directory -Path $helloRoot -Force
 
 Copy-Item -LiteralPath $mannyExecutable -Destination (Join-Path $packageRoot "manny.exe")
 Copy-Item -LiteralPath $licenseFile -Destination (Join-Path $packageRoot "LICENSE")
-Copy-Item -LiteralPath (Join-Path $exampleRoot "QUICKSTART.txt") -Destination (Join-Path $packageRoot "QUICKSTART.txt")
+Copy-Item -LiteralPath $cModule -Destination (Join-Path $packageRoot "c.elf")
+Copy-Item -LiteralPath $quickStart -Destination (Join-Path $packageRoot "QUICKSTART.txt")
 
 $exampleFiles = @("build.elf", "main.c", "message.c", "message.h")
 foreach ($exampleFile in $exampleFiles) {

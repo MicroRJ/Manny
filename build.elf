@@ -190,6 +190,30 @@ for suite := test_suites[...] ? {
 	previous_test = { run }
 }
 
+run_c_helper_example := {
+	name = "run C helper example",
+	command_line = "build\\manny.exe build.elf run",
+	working_directory = "example",
+	inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
+	outputs = {},
+	include_dirs = {},
+	dependencies = { build_manny }:extend(previous_test),
+}
+
+run_c_helper_fixture := {
+	name = "run C helper integration test",
+	command_line = "build\\manny.exe build.elf test",
+	working_directory = "tests/fixtures/c_helper",
+	inputs = {
+		"../../../build/manny.exe", "../../../c.elf", "build.elf", "codegen.c",
+		"fixture.c", "fixture_test.c", "main.c", "include/fixture.h",
+	},
+	outputs = {},
+	include_dirs = {},
+	dependencies = { run_c_helper_example },
+}
+test_targets = { run_c_helper_fixture }
+
 stress_compiled := compile_source({
 	name = "test_record_stress", source = "tests/test_record_stress.c", extra_options = "",
 })
