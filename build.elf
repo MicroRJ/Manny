@@ -1,6 +1,5 @@
 
 core_sources := {
-	{ name = "base",               path = "src/base.c"                      },
 	{ name = "logger",             path = "src/logger.c"                    },
 	{ name = "profiler",           path = "src/profiler.c"                  },
 	{ name = "manny_atom",         path = "src/lib/manny_atom.c"           },
@@ -30,7 +29,7 @@ include_dirs := {
 	"src/lib",
 	"blake3/c",
 	"elf/include",
-	"platform/include",
+	"dayan-core/include",
 }
 
 compile_options := " /nologo /std:c11 /W4 /WX /Zi /Od"
@@ -101,16 +100,21 @@ for source := blake3_sources[...] ? {
 	common_objects:add(compiled.object)
 }
 
-build_platform := {
-	name = "build platform library",
-	command_line = "cmd /c \"cd /d platform && ..\\blessed\\manny.exe build.elf lib\"",
+build_dayan := {
+	name = "build Dayan library",
+	command_line = "cmd /c \"cd /d dayan-core && ..\\blessed\\manny.exe build.elf lib\"",
 	inputs = {
-		"platform/build.elf",
-		"platform/include/platform.h",
-		"platform/include/platform_types.h",
-		"platform/src/platform_win32.c",
+		"dayan-core/build.elf",
+		"dayan-core/include/dayan.h",
+		"dayan-core/include/platform.h",
+		"dayan-core/include/platform_types.h",
+		"dayan-core/src/dayan.c",
+		"dayan-core/src/dayan_memory.c",
+		"dayan-core/src/dayan_memory.h",
+		"dayan-core/src/win32/dayan_memory.c",
+		"dayan-core/src/platform_win32.c",
 	},
-	outputs = { "platform/build/platform.lib" },
+	outputs = { "dayan-core/build/dayan.lib" },
 	include_dirs = {},
 	dependencies = {},
 	transparent = true,
@@ -124,20 +128,20 @@ manny_compiled := compile_source({
 manny_dependencies := common_tasks:clone():extend({
 	manny_compiled.task,
 	build_elf,
-	build_platform,
+	build_dayan,
 })
 manny_inputs := common_objects:clone():extend({
 	manny_compiled.object,
 	"elf/build/elf.lib",
 	"elf/build/elf_batteries.lib",
-	"platform/build/platform.lib",
+	"dayan-core/build/dayan.lib",
 })
 common_object_options := " ":join(common_objects)
 common_object_options = f" ${common_object_options}"
 
 build_manny := {
 	name = "link Manny",
-	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
+	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
 	inputs = manny_inputs,
 	outputs = { "build/manny.exe" },
 	include_dirs = {},
@@ -176,15 +180,15 @@ for suite := test_suites[...] ? {
 	pdb := f"build/tests/test_${suite.name}.pdb"
 	link := {
 		name = f"link ${suite.name} tests",
-		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
+		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
 		inputs = common_objects:clone():extend({
 			test_support.object, compiled.object,
-			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "platform/build/platform.lib",
+			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
 		}),
 		outputs = { executable },
 		include_dirs = {},
 		dependencies = common_tasks:clone():extend({
-			test_support.task, compiled.task, prepare_tests, build_elf, build_platform,
+			test_support.task, compiled.task, prepare_tests, build_elf, build_dayan,
 		}),
 	}
 	run := {
@@ -229,15 +233,15 @@ stress_compiled := compile_source({
 stress_executable := "build/tests/test_record_stress.exe"
 build_stress_tests := {
 	name = "link record stress tests",
-	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib platform\\build\\platform.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
+	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
 	inputs = common_objects:clone():extend({
 		test_support.object, stress_compiled.object,
-		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "platform/build/platform.lib",
+		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
 	}),
 	outputs = { stress_executable },
 	include_dirs = {},
 	dependencies = common_tasks:clone():extend({
-		test_support.task, stress_compiled.task, prepare_tests, build_elf, build_platform,
+		test_support.task, stress_compiled.task, prepare_tests, build_elf, build_dayan,
 	}),
 }
 run_stress_tests := {

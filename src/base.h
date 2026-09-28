@@ -1,26 +1,29 @@
 #ifndef BASE_H
 #define BASE_H
 
-#include <stdint.h>
-#include <stdarg.h>
+#include "dayan.h"
+
 #include <assert.h>
+#include <string.h>
 
 #define ASSERT assert
 
-typedef uint8_t     u8;
-typedef uint16_t    u16;
-typedef uint32_t    u32;
-typedef uint64_t    u64;
-typedef int8_t      i8;
-typedef int16_t     i16;
-typedef int32_t     i32;
-typedef int64_t     i64;
+typedef day_u8  u8;
+typedef day_u16 u16;
+typedef day_u32 u32;
+typedef day_u64 u64;
+typedef day_i8  i8;
+typedef day_i16 i16;
+typedef day_i32 i32;
+typedef day_i64 i64;
+typedef day_f32 f32;
+typedef day_f64 f64;
+typedef day_b32 b32;
 
-typedef float       f32;
-typedef double      f64;
-
-typedef i32 b32;
-
+typedef day_Arena Arena;
+typedef day_Scratch Scratch;
+typedef day_String String;
+typedef day_String_Array String_Array;
 
 #if defined(_MSC_VER)
 #define THREAD_LOCAL __declspec(thread)
@@ -36,101 +39,121 @@ typedef i32 b32;
 #define false 0
 #endif
 
-#define ARRAY_COUNT(array) (sizeof(array) / sizeof((array)[0]))
-#define KILOBYTES(value) ((u64)(value) << 10)
-#define MEGABYTES(value) ((u64)(value) << 20)
-#define GIGABYTES(value) ((u64)(value) << 30)
+#define ARRAY_COUNT DAY_ARRAY_COUNT
+#define KILOBYTES DAY_KILOBYTES
+#define MEGABYTES DAY_MEGABYTES
+#define GIGABYTES DAY_GIGABYTES
+#define LIT DAY_LIT
 
-typedef struct Arena {
-	u64 capacity;
-	u64 committed;
-	u64 used;
-	u8 *data;
-	const char *name;
-} Arena;
+#define arena_create day_arena_create
+#define arena_set_name day_arena_set_name
+#define arena_destroy day_arena_destroy
+#define arena_reset day_arena_reset
+#define arena_mark day_arena_mark
+#define arena_restore day_arena_restore
+#define arena_top day_arena_top
+#define arena_reserve day_arena_reserve
+#define arena_push day_arena_push
+#define arena_push_zero day_arena_push_zero
+#define arena_push_copy day_arena_push_copy
+#define arena_push_data day_arena_push_data
+#define arena_push_repeat day_arena_push_nchar
+#define arena_appendfv day_arena_pushfv
+#define arena_appendf day_arena_pushf
 
-typedef struct Scratch {
-	Arena *arena;
-	u64 restore_used;
-} Scratch;
+#define begin_scratch day_begin_scratch
+#define begin_different_scratch day_begin_different_scratch
+#define end_scratch day_end_scratch
+#define destroy_global_scratch day_destroy_thread_scratch
 
-#define SCRATCH_ARENA_COUNT 4
+#define string_from_data day_string_from_data
+#define string_from_range day_string_from_range
+#define string_from_cstring day_string_from_cstring
+#define string_equal day_string_equal
+#define string_slice day_string_slice
+#define string_split day_string_split
+#define string_split_lines day_string_split_lines
+#define string_split_block day_string_split_block
+#define string_split_first day_string_split_first
+#define string_trim_whitespace day_string_trim_whitespace
+#define string_equal_insensitive day_string_equal_insensitive
+#define string_starts_with day_string_starts_with
+#define string_ends_with day_string_ends_with
+#define string_ends_with_insensitive day_string_ends_with_insensitive
+#define string_is day_string_is
+#define string_count_lines day_string_count_lines
 
-typedef struct String {
-	union {
-		char *data;
-		char *text;
-	};
-	u64 size;
-} String;
+static inline void *arena_push_aligned(Arena *arena, u64 size, u64 alignment)
+{
+	day_arena_align(arena, alignment);
+	return day_arena_push(arena, size);
+}
 
-typedef struct String_Array {
-	String *items;
-	u32 count;
-} String_Array;
+static inline void *arena_push_zero_aligned(Arena *arena, u64 size, u64 alignment)
+{
+	day_arena_align(arena, alignment);
+	return day_arena_push_zero(arena, size);
+}
 
-#define LIT(text) ((String){ .data = (char *)(text), .size = sizeof(text) - 1 })
+static inline void *arena_push_copy_aligned(Arena *arena, u64 size, u64 alignment, const void *data)
+{
+	day_arena_align(arena, alignment);
+	return day_arena_push_copy(arena, size, data);
+}
 
-extern THREAD_LOCAL Arena global_scratch_arenas[SCRATCH_ARENA_COUNT];
+static inline char *arena_append_str(Arena *arena, String string)
+{
+	char *result = day_arena_reserve(arena, string.size + 1);
+	if (!result) return NULL;
+	if (string.size) memcpy(result, string.data, (size_t)string.size);
+	result[string.size] = 0;
+	arena->used += string.size;
+	return result;
+}
 
-Arena arena_create(u64 capacity);
-void arena_set_name(Arena *arena, const char *name);
-void arena_destroy(Arena *arena);
-void arena_reset(Arena *arena);
-u64 arena_mark(Arena *arena);
-void arena_restore(Arena *arena, u64 mark);
-void *arena_top(Arena *arena);
-void *arena_reserve(Arena *arena, u64 size);
-void *arena_reserve_aligned(Arena *arena, u64 size, u64 alignment);
-void *arena_push(Arena *arena, u64 size);
-void *arena_push_aligned(Arena *arena, u64 size, u64 alignment);
-void *arena_push_zero(Arena *arena, u64 size);
-void *arena_push_zero_aligned(Arena *arena, u64 size, u64 alignment);
-void *arena_push_copy(Arena *arena, u64 size, const void *data);
-void *arena_push_copy_aligned(Arena *arena, u64 size, u64 alignment, const void *data);
-char *arena_push_data(Arena *arena, const void *data, u64 size);
+static inline char *arena_append_text(Arena *arena, const char *text)
+{
+	return arena_append_str(arena, day_string_from_cstring(text));
+}
 
+static inline char *arena_append_char(Arena *arena, char character)
+{
+	char *result = day_arena_reserve(arena, 2);
+	if (!result) return NULL;
+	result[0] = character;
+	result[1] = 0;
+	arena->used += 1;
+	return result;
+}
 
+static inline String arena_string_from(Arena *arena, void *start)
+{
+	return day_string_from_range(start, day_arena_top(arena));
+}
 
-// TODO(RJ): the problem with this is that you may want to append additional
-// stuff to the string inside another function, you can pass in the arena but then it
-// gets a little sketchy, maybe we should just have an arena backed String_Builder.
-char *arena_append_text(Arena *arena, const char *text);
-char *arena_append_str(Arena *arena, String string);
-char *arena_append_char(Arena *arena, char character);
-void arena_push_repeat(Arena *arena, char character, u64 count);
-char *arena_appendfv(Arena *arena, const char *format, va_list arguments);
-char *arena_appendf(Arena *arena, const char *format, ...);
-// TODO(RJ): most of the people calling this do arena_finalize_string right after
-String arena_string_from(Arena *arena, void *start);
-// TODO(RJ): this is a terrible API design, instead it should just return the String already terminated!
-void arena_finalize_string(Arena *arena, String string);
+static inline void arena_finalize_string(Arena *arena, String string)
+{
+	ASSERT(string.data + string.size == (char *)day_arena_top(arena));
+	ASSERT(*(char *)day_arena_top(arena) == 0);
+	day_arena_push_char(arena, 0);
+}
 
-Scratch begin_scratch(void);
-Scratch begin_different_scratch(Arena *conflict);
-void end_scratch(Scratch scratch);
-void destroy_global_scratch(void);
+static inline b32 string_is_terminated(String string)
+{
+	return string.data && string.data[string.size] == 0;
+}
 
-String string_from_data(void *data, u64 size);
-String string_from_range(void *start, void *end);
-String string_from_cstring(const char *text);
-b32 string_is_terminated(String string);
-b32 string_equal(String a, String b);
-String string_slice(String string, u64 offset, u64 size);
-String_Array string_split(Arena *arena, String string, char separator);
-String_Array string_split_lines(Arena *arena, String string);
-String_Array string_split_block(Arena *arena, String string);
-b32 string_split_first(String string, char separator, String *left, String *right);
-String string_trim_whitespace(String string);
-String str_push_copy(Arena *arena, String string);
-String arena_push_cstring(Arena *arena, const char *text);
-b32 string_equal_insensitive(String left, String right);
-b32 string_starts_with(String text, String prefix);
-b32 string_ends_with(String text, String suffix);
-b32 string_ends_with_insensitive(String text, String suffix);
-b32 string_is(String text, const char *literal);
-u32 string_count_lines(String str);
+static inline String str_push_copy(Arena *arena, String string)
+{
+	char *data = day_arena_push_data(arena, string.data, string.size);
+	if (!data) return (String){0};
+	if (!day_arena_push_char(arena, 0)) return (String){0};
+	return day_string_from_data(data, string.size);
+}
 
-
+static inline String arena_push_cstring(Arena *arena, const char *text)
+{
+	return str_push_copy(arena, day_string_from_cstring(text));
+}
 
 #endif
