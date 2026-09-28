@@ -6,6 +6,10 @@
   libraries, generated files, tests, and public/private usage requirements. The
   helpers generate ordinary Manny tasks and preserve access to the raw graph.
 
+- Added `manny.load("c")` for loading Manny's shipped C target module regardless
+  of the project's working directory. Projects can still vendor modules through
+  `elf.load_file()`.
+
 ## 2026-09-27
 
 - Renamed Bob to Manny. The executable, C API, elf library, build state, packaging, examples, and project files now use the Manny name.

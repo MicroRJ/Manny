@@ -144,6 +144,15 @@ build_manny := {
 	dependencies = manny_dependencies,
 }
 
+stage_c_module := {
+	name = "stage C target module",
+	command_line = "cmd /d /c copy /Y c.elf build\\c.elf >nul",
+	inputs = { "c.elf" },
+	outputs = { "build/c.elf" },
+	include_dirs = {},
+	dependencies = { prepare },
+}
+
 test_suites := {
 	{ name = "base",     source = "tests/test_base.c"     },
 	{ name = "graph",    source = "tests/test_graph.c"    },
@@ -197,7 +206,7 @@ run_c_helper_example := {
 	inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
 	outputs = {},
 	include_dirs = {},
-	dependencies = { build_manny }:extend(previous_test),
+	dependencies = { build_manny, stage_c_module }:extend(previous_test),
 }
 
 run_c_helper_fixture := {
@@ -249,7 +258,7 @@ entries := {}
 
 entries.build = fun() {
 	ret manny.build({
-		targets = { build_manny },
+		targets = { build_manny, stage_c_module },
 		options = options,
 	})
 }
@@ -320,19 +329,16 @@ entries.bless = fun() {
 
 	file_size := format_number(fs.read_text_file("build/manny.exe"):length())
 
-	manifest :=
-	f"""
-	# Manny Manifest
-	- target                     := windows-x64
-	- manny_version              := ${manny.version}
-	- manny_source_commit        := ${manny_commit}
-	- elf_version                := 0.2.0-dev
-	- elf_commit                 := ${elf_commit}
-	- platform_version           := 0.1.0-dev
-	- platform_commit            := ${platform_commit}
-	- executable_size            := ${file_size} bytes
-	- SHA-256                    := ${sha256}
-	"""
+	manifest := "# Manny Manifest\n"
+	manifest += "- target                     := windows-x64\n"
+	manifest += f"- manny_version              := ${manny.version}\n"
+	manifest += f"- manny_source_commit        := ${manny_commit}\n"
+	manifest += "- elf_version                := 0.2.0-dev\n"
+	manifest += f"- elf_commit                 := ${elf_commit}\n"
+	manifest += "- platform_version           := 0.1.0-dev\n"
+	manifest += f"- platform_commit            := ${platform_commit}\n"
+	manifest += f"- executable_size            := ${file_size} bytes\n"
+	manifest += f"- SHA-256                    := ${sha256}\n"
 	fs.write_text_file(f"${archive_directory}/manifest.md", manifest)
 }
 

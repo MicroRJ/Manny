@@ -376,6 +376,49 @@ ELF_FUNCTION(l_manny_build)
 	return 1;
 }
 
+ELF_FUNCTION(l_manny_load)
+{
+	const char *name;
+	const char *filename = NULL;
+	if (nargs != 2 || !elf_to_cstr(S, 1, &name)) {
+		elf_error(S, "manny.load expects one module name");
+		return 0;
+	}
+	if (strcmp(name, "c") == 0) filename = "c.elf";
+	if (!filename) {
+		elf_error(S, "unknown Manny module");
+		return 0;
+	}
+
+	Scratch scratch = begin_scratch();
+	String executable;
+	if (!manny_platform_executable_path(scratch.arena, &executable)) {
+		end_scratch(scratch);
+		elf_error(S, "could not locate the Manny executable");
+		return 0;
+	}
+	u64 directory_size = executable.size;
+	while (directory_size && executable.data[directory_size - 1] != '/' && executable.data[directory_size - 1] != '\\') --directory_size;
+	void *start = arena_top(scratch.arena);
+	arena_append_str(scratch.arena, string_slice(executable, 0, directory_size));
+	arena_append_text(scratch.arena, filename);
+	String path = arena_string_from(scratch.arena, start);
+	arena_finalize_string(scratch.arena, path);
+	if (!elf_push_code_file(S, path.data)) {
+		elf_pop(S, 1);
+		void *message_start = arena_top(scratch.arena);
+		arena_appendf(scratch.arena, "Manny module '%s' was not found beside the executable: %s", name, path.data);
+		String message = arena_string_from(scratch.arena, message_start);
+		arena_finalize_string(scratch.arena, message);
+		elf_error(S, message.data);
+		end_scratch(scratch);
+		return 0;
+	}
+	end_scratch(scratch);
+	elf_push_value(S, 0);
+	return elf_tail_call(S, 1, nrets);
+}
+
 static b32 register_manny_library(elf_State *state)
 {
 	elf_i32 checkpoint = elf_get_top(state);
@@ -383,6 +426,7 @@ static b32 register_manny_library(elf_State *state)
 	elf_i32 manny = elf_abs_index(state, -1);
 
 	if (!set_function(state, manny, "build", l_manny_build)) goto error;
+	if (!set_function(state, manny, "load", l_manny_load)) goto error;
 	elf_push_cstr(state, MANNY_VERSION);
 	if (!elf_set_field(state, manny, "version")) goto error;
 
@@ -481,4 +525,3 @@ b32 elf_script_invoke(Script *script, String name)
 	elf_set_top(elf->state, checkpoint);
 	return true;
 }
-

@@ -1,8 +1,5 @@
 
-c_module ::= elf.load_file("../c.elf")
-c ::= c_module.configure({
-	compile_options = { "/W4" },
-})
+c ::= manny.load("c")
 
 message ::= c.static_library({
 	name = "message",

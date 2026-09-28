@@ -13,6 +13,24 @@ b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
 	return true;
 }
 
+b32 manny_platform_executable_path(Arena *arena, String *result)
+{
+	if (!arena || !result) return false;
+	Platform_String_Result query = platform_get_executable_path(NULL, 0);
+	if (query.error || query.required_capacity == 0) return false;
+	u64 mark = arena_mark(arena);
+	char *data = arena_reserve(arena, query.required_capacity);
+	if (!data) return false;
+	Platform_String_Result filled = platform_get_executable_path(data, query.required_capacity);
+	if (filled.error || !arena_push(arena, query.required_capacity)) {
+		arena_restore(arena, mark);
+		return false;
+	}
+	result->data = data;
+	result->size = filled.size;
+	return true;
+}
+
 b32 manny_platform_current_directory(Arena *arena, String *result)
 {
 	if (!arena || !result) return false;

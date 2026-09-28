@@ -17,10 +17,7 @@ the public API and build-state format may still change.
 ## A build
 
 ```elf
-c_module ::= elf.load_file("c.elf")
-c ::= c_module.configure({
-	compile_options = { "/W4" },
-})
+c ::= manny.load("c")
 
 hello ::= c.executable({
 	name = "hello",
@@ -165,9 +162,11 @@ cd example
 The example's generated files live under `example\build`, and its persistent
 incremental state lives under `example\.manny`.
 
-For a new project, place [`c.elf`](c.elf) beside `build.elf`, copy the opening
-example, and change the source list. The low-level task format remains available
-for custom tools and non-C work.
+`manny.load("c")` loads the `c.elf` shipped beside the executable. Copy the
+opening example and change the source list. Projects can instead vendor a
+specific `c.elf` and load it with `elf.load_file()` when they want to pin or
+modify the helpers. The low-level task format remains available for custom tools
+and non-C work.
 
 ## Command line
 

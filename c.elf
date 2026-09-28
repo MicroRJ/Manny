@@ -300,4 +300,6 @@ configure ::= fun(options) {
 	}
 }
 
-ret { configure = configure }
+module := configure({})
+module.configure = configure
+ret module

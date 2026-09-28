@@ -25,6 +25,7 @@ typedef struct Manny_Platform_Process_Options {
 } Manny_Platform_Process_Options;
 
 b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info);
+b32 manny_platform_executable_path(Arena *arena, String *result);
 b32 manny_platform_current_directory(Arena *arena, String *result);
 b32 manny_platform_absolute_path(Arena *arena, String path, String *result);
 b32 manny_platform_read_entire_file(Arena *arena, String path, String *result);

@@ -4,19 +4,20 @@
 scheduler or incremental state; `manny.build()` still executes the resulting
 graph.
 
-Keep `c.elf` beside your build script and configure it once:
+Load the module shipped beside the Manny executable and configure it once:
 
 ```elf
-c_module ::= elf.load_file("c.elf")
-c ::= c_module.configure({
-	compile_options = { "/W4" },
-})
+c ::= manny.load("c")
 ```
+
+`manny.load()` only exposes modules shipped with Manny. To pin or modify the
+helper, vendor `c.elf` in the project and use `elf.load_file()` instead.
 
 The default configuration uses `clang-cl`, `lib`, `build`, and MSVC-style
 command-line options. Every default can be replaced:
 
 ```elf
+c_module ::= manny.load("c")
 c ::= c_module.configure({
 	style = "gnu",
 	compiler = "gcc",

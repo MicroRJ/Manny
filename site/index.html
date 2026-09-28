@@ -29,10 +29,7 @@
 			<div class="build-content">
 				<div class="script">
 					<p class="filename">build.elf</p>
-					<pre><code><span class="name">c_module</span> ::= elf.load_file(<span class="string">"c.elf"</span>)
-<span class="name">c</span> ::= c_module.configure({
-	compile_options = { <span class="string">"/W4"</span> },
-})
+					<pre><code><span class="name">c</span> ::= manny.load(<span class="string">"c"</span>)
 
 <span class="name">hello</span> ::= c.executable({
 	name = <span class="string">"hello"</span>,
