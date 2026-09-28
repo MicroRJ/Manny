@@ -120,6 +120,7 @@ build_dayan := {
 		"dayan-core/src/win32/dayan_env.c",
 		"dayan-core/src/dayan_process.c",
 		"dayan-core/src/win32/dayan_process.c",
+		"dayan-core/src/win32/dayan_win32.h",
 		"dayan-core/src/platform_win32.c",
 	},
 	outputs = { "dayan-core/build/dayan.lib" },
