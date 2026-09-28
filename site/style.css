@@ -95,6 +95,12 @@ h1 {
 	line-height: 0.88;
 }
 
+.intro h1 {
+	font-family: "Bagel Fat One", var(--sans);
+	font-weight: 400;
+	letter-spacing: 0;
+}
+
 .summary {
 	margin-top: 32px;
 	color: var(--muted);
