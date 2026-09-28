@@ -2,7 +2,7 @@
 
 > Manny builds.
 
-[Website](https://microrj.github.io/Manny/) · [Download](https://github.com/MicroRJ/Manny/releases/latest)
+[Website](https://microrj.github.io/Manny/) · [Download](https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev)
 
 Manny is a small programmable build system for C.
 
@@ -137,7 +137,7 @@ Requirements:
 - `clang-cl` available from the command line
 
 Download and extract the latest
-[Windows preview](https://github.com/MicroRJ/Manny/releases/latest). Open a
+[Windows preview](https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev). Open a
 command prompt in its `hello` directory, then run:
 
 ```bat
