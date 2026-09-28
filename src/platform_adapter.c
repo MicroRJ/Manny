@@ -5,11 +5,13 @@
 
 b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
 {
-	Platform_File_Info shared;
-	if (!string_is_terminated(path) || !info || !platform_get_file_info(path.data, &shared)) return false;
-	info->size = shared.size;
-	info->modified_unix_ms = shared.modified_unix_ms;
-	info->is_directory = shared.is_directory;
+	day_File_Info_Result shared;
+	if (!info) return false;
+	shared = day_get_file_info(path);
+	if (shared.error) return false;
+	info->size = shared.info.size;
+	info->modified_unix_ms = shared.info.modified_unix_ms;
+	info->is_directory = shared.info.is_directory;
 	return true;
 }
 
@@ -69,38 +71,43 @@ b32 manny_platform_absolute_path(Arena *arena, String path, String *result)
 
 b32 manny_platform_read_entire_file(Arena *arena, String path, String *result)
 {
-	if (!arena || !result || !string_is_terminated(path)) return false;
+	day_File_Result opened;
+	day_File_Size_Result size;
+	day_IO_Result read;
+	if (!arena || !result) return false;
 	u64 mark = arena_mark(arena);
-	Platform_File file = platform_access_file(path.data, PLATFORM_FILE_OPEN_EXISTING,
-		PLATFORM_FILE_READ | PLATFORM_FILE_SHARE_READ | PLATFORM_FILE_SHARE_WRITE | PLATFORM_FILE_SHARE_DELETE);
-	if (!platform_file_is_valid(file)) return false;
-	u64 size = 0;
-	if (!platform_get_file_size(file, &size) || size == UINT64_MAX) goto failure;
-	char *data = arena_push(arena, size + 1);
+	opened = day_access_file(path, DAY_FILE_OPEN_EXISTING,
+		DAY_FILE_READ | DAY_FILE_SHARE_READ | DAY_FILE_SHARE_WRITE | DAY_FILE_SHARE_DELETE);
+	if (opened.error) return false;
+	size = day_get_file_size(opened.file);
+	if (size.error || size.size == UINT64_MAX) goto failure;
+	char *data = arena_push(arena, size.size + 1);
 	if (!data) goto failure;
-	u64 read = 0;
-	if (!platform_read_file(file, data, size, &read) || read != size) goto failure;
-	platform_close_file(file);
-	data[size] = 0;
+	read = day_read_file(opened.file, data, size.size);
+	if (read.error || read.size != size.size) goto failure;
+	day_close_file(opened.file);
+	data[size.size] = 0;
 	result->data = data;
-	result->size = size;
+	result->size = size.size;
 	return true;
 
 failure:
-	platform_close_file(file);
+	day_close_file(opened.file);
 	arena_restore(arena, mark);
 	return false;
 }
 
 b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 {
-	if (!string_is_terminated(path) || (!data && size)) return false;
-	Platform_File file = platform_access_file(path.data, PLATFORM_FILE_CREATE_ALWAYS, PLATFORM_FILE_WRITE);
-	if (!platform_file_is_valid(file)) return false;
-	u64 written = 0;
-	b32 result = platform_write_file(file, data, size, &written) && written == size;
-	platform_close_file(file);
-	return result;
+	day_File_Result opened;
+	day_IO_Result written;
+	day_Result closed;
+	if (!data && size) return false;
+	opened = day_access_file(path, DAY_FILE_CREATE_ALWAYS, DAY_FILE_WRITE);
+	if (opened.error) return false;
+	written = day_write_file(opened.file, data, size);
+	closed = day_close_file(opened.file);
+	return !written.error && written.size == size && !closed.error;
 }
 
 b32 manny_platform_create_directory(String path)
