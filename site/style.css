@@ -118,8 +118,11 @@ h1 {
 	margin-left: 5px;
 }
 
-.example,
-.guide {
+.content-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 210px;
+	gap: 72px;
+	align-items: start;
 	padding-bottom: clamp(110px, 15vw, 170px);
 }
 
@@ -197,17 +200,15 @@ pre {
 
 .guide-links {
 	display: grid;
-	grid-template-columns: 1fr 1fr;
-	column-gap: 54px;
+	grid-template-columns: 1fr;
 }
 
 .guide-links a {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	padding: 18px 0;
-	border-bottom: 1px solid #cfc0ae;
-	font-size: 18px;
+	padding: 7px 0;
+	font-size: 15px;
 }
 
 .guide-links i {
@@ -219,6 +220,24 @@ pre {
 .guide-links a:hover i,
 .guide-links a:focus-visible i {
 	transform: translateX(4px);
+}
+
+.guide {
+	position: sticky;
+	top: 30px;
+}
+
+.guide .section-heading {
+	display: block;
+	margin-bottom: 18px;
+}
+
+.guide .section-heading > p {
+	margin-bottom: 5px;
+}
+
+.guide h2 {
+	font-size: 25px;
 }
 
 footer {
@@ -299,6 +318,22 @@ footer a {
 
 .statement p + p {
 	margin-top: 8px;
+}
+
+@media (max-width: 800px) {
+	.content-layout {
+		grid-template-columns: 1fr;
+		gap: 80px;
+	}
+
+	.guide {
+		position: static;
+	}
+
+	.guide-links {
+		grid-template-columns: 1fr 1fr;
+		column-gap: 42px;
+	}
 }
 
 @media (max-width: 640px) {

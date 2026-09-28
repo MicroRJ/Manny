@@ -33,14 +33,15 @@
 			</div>
 		</section>
 
-		<section class="example" aria-labelledby="example-title">
-			<div class="section-heading">
-				<p>build.elf</p>
-				<h2 id="example-title">A complete build.</h2>
-			</div>
+		<div class="content-layout">
+			<section class="example" aria-labelledby="example-title">
+				<div class="section-heading">
+					<p>build.elf</p>
+					<h2 id="example-title">A complete build.</h2>
+				</div>
 
-			<div class="code-block">
-				<pre><code><span class="variable">c</span> ::= manny.<span class="call">load</span>(<span class="string">"c"</span>)
+				<div class="code-block">
+					<pre><code><span class="variable">c</span> ::= manny.<span class="call">load</span>(<span class="string">"c"</span>)
 
 <span class="variable">hello</span> ::= c.<span class="call">executable</span>({
 	<span class="property">name</span> = <span class="string">"hello"</span>,
@@ -53,33 +54,34 @@ entries.<span class="property">build</span> = <span class="keyword">fun</span>()
 }
 
 <span class="keyword">ret</span> entries</code></pre>
-			</div>
+				</div>
 
-			<div class="terminal">
-				<p>manny</p>
-				<pre><code><span class="prompt">&gt;</span> manny
+				<div class="terminal">
+					<p>manny</p>
+					<pre><code><span class="prompt">&gt;</span> manny
 
 <span class="progress">[1/3 succeeded]</span> compile hello: main.c
 <span class="progress">[2/3 succeeded]</span> compile hello: message.c
 <span class="progress">[3/3 succeeded]</span> link hello</code></pre>
-			</div>
-		</section>
+				</div>
+			</section>
 
-		<section class="guide" id="guide" aria-labelledby="guide-title">
-			<div class="section-heading">
-				<p>Documentation</p>
-				<h2 id="guide-title">Start here.</h2>
-			</div>
-			<nav class="guide-links" aria-label="Documentation">
-				<a href="why.html"><span>Why Manny?</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#getting-started"><span>Getting started</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><span>C and C++ targets</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#the-model"><span>Tasks and dependencies</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny#command-line"><span>Command line</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><span>C library</span><i aria-hidden="true">&#8594;</i></a>
-				<a href="https://github.com/MicroRJ/Manny"><span>Source</span><i aria-hidden="true">&#8599;</i></a>
-			</nav>
-		</section>
+			<aside class="guide" id="guide" aria-labelledby="guide-title">
+				<div class="section-heading">
+					<p>Documentation</p>
+					<h2 id="guide-title">Start here.</h2>
+				</div>
+				<nav class="guide-links" aria-label="Documentation">
+					<a href="why.html"><span>Why Manny?</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny#getting-started"><span>Getting started</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><span>C and C++ targets</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny#the-model"><span>Tasks and dependencies</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny#command-line"><span>Command line</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h"><span>C library</span><i aria-hidden="true">&#8594;</i></a>
+					<a href="https://github.com/MicroRJ/Manny"><span>Source</span><i aria-hidden="true">&#8599;</i></a>
+				</nav>
+			</aside>
+		</div>
 	</main>
 
 	<footer>
