@@ -1,4 +1,8 @@
-# C and C++ targets
+---
+title: C and C++ targets
+label: Guide
+description: Manny's optional high-level helpers for C and C++ targets.
+---
 
 `c.elf` turns target descriptions into ordinary Manny tasks. It does not own a
 scheduler or incremental state; `manny.build()` still executes the resulting
