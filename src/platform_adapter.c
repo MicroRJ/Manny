@@ -5,85 +5,69 @@
 
 b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
 {
-	day_File_Info_Result shared;
+	day_File_Info shared;
 	if (!info) return false;
-	shared = day_get_file_info(path);
-	if (shared.error) return false;
-	info->size = shared.info.size;
-	info->modified_unix_ms = shared.info.modified_unix_ms;
-	info->is_directory = shared.info.is_directory;
+	if (day_get_file_info(path, &shared).error) return false;
+	info->size = shared.size;
+	info->modified_unix_ms = shared.modified_unix_ms;
+	info->is_directory = shared.is_directory;
 	return true;
 }
 
 b32 manny_platform_executable_path(Arena *arena, String *result)
 {
-	day_String_Result path;
 	if (!arena || !result) return false;
-	path = day_get_executable_path(arena);
-	if (path.error) return false;
-	*result = path.value;
-	return true;
+	return day_get_executable_path(arena, result).error == DAY_ERROR_NONE;
 }
 
 b32 manny_platform_current_directory(Arena *arena, String *result)
 {
-	day_String_Result path;
 	if (!arena || !result) return false;
-	path = day_get_current_directory(arena);
-	if (path.error) return false;
-	*result = path.value;
-	return true;
+	return day_get_current_directory(arena, result).error == DAY_ERROR_NONE;
 }
 
 b32 manny_platform_absolute_path(Arena *arena, String path, String *result)
 {
-	day_String_Result absolute;
 	if (!arena || !result) return false;
-	absolute = day_get_absolute_path(arena, path);
-	if (absolute.error) return false;
-	*result = absolute.value;
-	return true;
+	return day_get_absolute_path(arena, path, result).error == DAY_ERROR_NONE;
 }
 
 b32 manny_platform_read_entire_file(Arena *arena, String path, String *result)
 {
-	day_File_Result opened;
-	day_File_Size_Result size;
-	day_IO_Result read;
+	day_File file;
+	u64 size;
+	u64 read;
 	if (!arena || !result) return false;
 	u64 mark = arena_mark(arena);
-	opened = day_access_file(path, DAY_FILE_OPEN_EXISTING,
-		DAY_FILE_READ | DAY_FILE_SHARE_READ | DAY_FILE_SHARE_WRITE | DAY_FILE_SHARE_DELETE);
-	if (opened.error) return false;
-	size = day_get_file_size(opened.file);
-	if (size.error || size.size == UINT64_MAX) goto failure;
-	char *data = arena_push(arena, size.size + 1);
+	if (day_access_file(path, DAY_FILE_OPEN_EXISTING,
+		DAY_FILE_READ | DAY_FILE_SHARE_READ | DAY_FILE_SHARE_WRITE | DAY_FILE_SHARE_DELETE, &file).error) return false;
+	if (day_get_file_size(file, &size).error || size == UINT64_MAX) goto failure;
+	char *data = arena_push(arena, size + 1);
 	if (!data) goto failure;
-	read = day_read_file(opened.file, data, size.size);
-	if (read.error || read.size != size.size) goto failure;
-	day_close_file(opened.file);
-	data[size.size] = 0;
+	if (day_read_file(file, data, size, &read).error || read != size) goto failure;
+	day_close_file(file);
+	data[size] = 0;
 	result->data = data;
-	result->size = size.size;
+	result->size = size;
 	return true;
 
 failure:
-	day_close_file(opened.file);
+	day_close_file(file);
 	arena_restore(arena, mark);
 	return false;
 }
 
 b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 {
-	day_File_Result opened;
-	day_IO_Result written;
+	day_File file;
+	u64 written;
+	day_Result write;
 	day_Result closed;
 	if (!data && size) return false;
-	opened = day_access_file(path, DAY_FILE_CREATE_ALWAYS, DAY_FILE_WRITE);
-	if (opened.error) return false;
-	written = day_write_file(opened.file, data, size);
-	closed = day_close_file(opened.file);
-	return !written.error && written.size == size && !closed.error;
+	if (day_access_file(path, DAY_FILE_CREATE_ALWAYS, DAY_FILE_WRITE, &file).error) return false;
+	write = day_write_file(file, data, size, &written);
+	closed = day_close_file(file);
+	return !write.error && written == size && !closed.error;
 }
 
 b32 manny_platform_create_directory(String path)
