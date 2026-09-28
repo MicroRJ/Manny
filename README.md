@@ -2,6 +2,8 @@
 
 > Manny builds.
 
+[Website](https://microrj.github.io/Manny/) · [Download](https://github.com/MicroRJ/Manny/releases/latest)
+
 Manny is a small programmable build system for C.
 
 Build scripts are ordinary [elf](https://github.com/MicroRJ/elf) programs. They
@@ -133,7 +135,18 @@ Requirements:
 - Windows x64
 - Visual Studio C++ build tools
 - `clang-cl` available from the command line
-- Git with submodule support
+
+Download and extract the latest
+[Windows preview](https://github.com/MicroRJ/Manny/releases/latest). Open a
+command prompt in its `hello` directory, then run:
+
+```bat
+..\manny.exe
+..\manny.exe run
+..\manny.exe --explain
+```
+
+To build Manny itself, Git with submodule support is also required.
 
 Clone Manny and its dependencies:
 

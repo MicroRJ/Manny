@@ -3,7 +3,11 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta name="description" content="Manny build system.">
+	<meta name="description" content="Manny is a programmable build system for C.">
+	<meta property="og:title" content="Manny">
+	<meta property="og:description" content="A programmable build system for C.">
+	<meta property="og:type" content="website">
+	<meta property="og:url" content="https://microrj.github.io/Manny/">
 	<title>Manny</title>
 	<link rel="preconnect" href="https://fonts.googleapis.com">
 	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,9 +41,12 @@
 	private_include_directories = { <span class="string">"include"</span> },
 })
 
+entries := {}
 entries.build = <span class="keyword">fun</span>() {
 	<span class="keyword">ret</span> manny.build({ targets = { hello.task } })
-}</code></pre>
+}
+
+<span class="keyword">ret</span> entries</code></pre>
 				</div>
 
 				<div class="output">
@@ -56,6 +63,7 @@ entries.build = <span class="keyword">fun</span>() {
 		<section class="docs" id="docs">
 			<h2>DOCUMENTATION</h2>
 			<nav class="docs-index" aria-label="Documentation">
+				<a href="https://github.com/MicroRJ/Manny/releases/latest"><strong>Download</strong><i aria-hidden="true">&#8599;</i></a>
 				<a href="https://github.com/MicroRJ/Manny#getting-started"><strong>Getting started</strong><i aria-hidden="true">&#8594;</i></a>
 				<a href="https://github.com/MicroRJ/Manny/blob/master/docs/c.md"><strong>C and C++ targets</strong><i aria-hidden="true">&#8594;</i></a>
 				<a href="https://github.com/MicroRJ/Manny#the-model"><strong>Tasks and dependencies</strong><i aria-hidden="true">&#8594;</i></a>
