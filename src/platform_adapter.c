@@ -77,7 +77,7 @@ b32 manny_platform_create_directory(String path)
 
 b32 manny_platform_executable_resolves(String name)
 {
-	return string_is_terminated(name) && platform_executable_resolves(name.data);
+	return day_executable_resolves(name);
 }
 
 b32 manny_platform_get_environment(String name, Arena *arena, String *value)
