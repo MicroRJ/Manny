@@ -112,6 +112,8 @@ build_dayan := {
 		"dayan-core/src/dayan_memory.c",
 		"dayan-core/src/dayan_memory.h",
 		"dayan-core/src/win32/dayan_memory.c",
+		"dayan-core/src/dayan_file.c",
+		"dayan-core/src/win32/dayan_file.c",
 		"dayan-core/src/platform_win32.c",
 	},
 	outputs = { "dayan-core/build/dayan.lib" },
