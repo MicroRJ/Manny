@@ -1,19 +1,34 @@
-
-c ::= manny.load("c")
-
-message ::= c.static_library({
+message := {
+	kind = "static_library",
 	name = "message",
 	sources = { "message.c" },
 	public_include_directories = { "." },
-})
+}
 
-hello ::= c.executable({
+hello := {
+	kind = "executable",
 	name = "hello",
 	sources = { "main.c" },
 	dependencies = { message },
-})
+}
 
-run ::= c.run({ target = hello })
+run := {
+	kind = "run",
+	name = "run hello",
+	target = hello,
+}
+
+project := {
+	name = "hello",
+	default_target = hello,
+	targets = {
+		message = message,
+		hello = hello,
+		run = run,
+	},
+}
+
+tasks := manny.load("c").project_to_tasks(project)
 
 options := {
 	workers = 4,
@@ -23,17 +38,11 @@ options := {
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({
-		targets = { hello.task },
-		options = options,
-	})
+	ret manny.build({ targets = { tasks.default_task }, options = options })
 }
 
 entries.run = fun() {
-	ret manny.build({
-		targets = { run },
-		options = options,
-	})
+	ret manny.build({ targets = { tasks.targets.run }, options = options })
 }
 
 ret entries

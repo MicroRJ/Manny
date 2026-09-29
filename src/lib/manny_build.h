@@ -17,6 +17,7 @@ Manny_Fingerprint;
 typedef struct Manny_Task_Desc
 {
 	String       name;
+	// TODO(RJ): replace this with the executable name, and arguments instead!
 	String       command_line;
 	String       working_directory;
 	String_Array inputs;
@@ -28,10 +29,10 @@ Manny_Task_Desc;
 
 typedef struct Manny_Build_Params
 {
-	u32                 worker_count;
-	b32                 explain;
+	u32                   worker_count;
+	b32                   explain;
 	/* Events are delivered on the thread calling manny_build. */
-	void               *user_data;
+	void                 *user_data;
 	Manny_Event_Function *event;
 }
 Manny_Build_Params;

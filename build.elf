@@ -1,140 +1,11 @@
+c_module := elf.load_file("c.elf")
+project := elf.load_file("project.elf")
 
-core_sources := {
-	{ name = "logger",             path = "src/logger.c"                    },
-	{ name = "profiler",           path = "src/profiler.c"                  },
-	{ name = "manny_atom",         path = "src/lib/manny_atom.c"           },
-	{ name = "manny",              path = "src/lib/manny.c"                },
-	{ name = "manny_execution",    path = "src/lib/manny_execution.c"      },
-	{ name = "manny_build",        path = "src/lib/manny_build.c"          },
-	{ name = "build_record",        path = "src/lib/build_record.c"         },
-	{ name = "build_record_stream", path = "src/lib/build_record_stream.c"  },
-	{ name = "compiler_command",   path = "src/lib/compiler_command.c"       },
-	{ name = "make_depfile",       path = "src/lib/make_depfile.c"           },
-	{ name = "vcvars_cache",       path = "src/lib/vcvars_cache.c"          },
-	{ name = "script",             path = "src/script.c"                    },
-	{ name = "elf_adapter",        path = "src/scripts/elf_adapter.c"       },
-	{ name = "platform",           path = "src/platform_adapter.c"          },
-}
-
-blake3_sources := {
-	{ name = "blake3",          path = "blake3/c/blake3.c"          },
-	{ name = "blake3_dispatch", path = "blake3/c/blake3_dispatch.c" },
-	{ name = "blake3_portable", path = "blake3/c/blake3_portable.c" },
-}
-
-cc := "clang-cl"
-
-include_dirs := {
-	"src",
-	"src/lib",
-	"blake3/c",
-	"elf/include",
-	"dayan-core/include",
-}
-
-compile_options := " /nologo /std:c11 /W4 /WX /Zi /Od"
-blake3_compile_options := " /DBLAKE3_NO_SSE2 /DBLAKE3_NO_SSE41 /DBLAKE3_NO_AVX2 /DBLAKE3_NO_AVX512 /DBLAKE3_USE_NEON=0"
-
-include_options := " " + " ":join(include_dirs:map(fun(directory) ret f"/I${directory}"))
-
-prepare := {
-	name = "prepare object directory",
-	command_line = "cmd /c if not exist build\\obj mkdir build\\obj",
-	inputs = {},
-	outputs = { "build/obj" },
-	include_dirs = {},
-	dependencies = {},
-}
-
-prepare_tests := {
-	name = "prepare test directory",
-	command_line = "cmd /c if not exist build\\tests mkdir build\\tests",
-	inputs = {},
-	outputs = { "build/tests" },
-	include_dirs = {},
-	dependencies = {},
-}
-
-build_elf := {
-	name = "build Elf library",
-	command_line = "cmd /c \"cd /d elf && ..\\blessed\\manny.exe build.elf lib\"",
-	inputs = {},
-	outputs = {},
-	include_dirs = {},
-	dependencies = {},
-	transparent = true,
-}
-
-compile_source := fun(options) {
-	object := f"build/obj/${options.name}.obj"
-	pdb := f"build/obj/${options.name}.pdb"
-	task := {
-		name = f"compile ${options.name}",
-		command_line = f"${cc}${compile_options}${options.extra_options}${include_options} /c ${options.source} /Fo${object} /Fd${pdb}",
-		inputs = { options.source },
-		outputs = { object },
-		include_dirs = include_dirs,
-		dependencies = { prepare },
-	}
-	ret { task = task, object = object }
-}
-
-common_tasks := {}
-common_objects := {}
-for source := core_sources[...] ? {
-	compiled := compile_source({
-		name = source.name,
-		source = source.path,
-		extra_options = "",
-	})
-	common_tasks:add(compiled.task)
-	common_objects:add(compiled.object)
-}
-for source := blake3_sources[...] ? {
-	compiled := compile_source({
-		name = source.name,
-		source = source.path,
-		extra_options = blake3_compile_options,
-	})
-	common_tasks:add(compiled.task)
-	common_objects:add(compiled.object)
-}
-
-dayan_module := elf.load_file("dayan-core/dayan.elf")
-dayan_graph := dayan_module.create({
-	root = "dayan-core",
-	output_directory = "dayan-core/build",
-	compiler = cc,
+tasks := c_module.project_to_tasks(project, {
+	compiler = "clang-cl",
+	output_directory = "build",
+	compile_options = { "/std:c11", "/Zi", "/Od" },
 })
-build_dayan := dayan_graph.library.task
-
-manny_compiled := compile_source({
-	name = "manny_main",
-	source = "src/manny_main.c",
-	extra_options = "",
-})
-manny_dependencies := common_tasks:clone():extend({
-	manny_compiled.task,
-	build_elf,
-	build_dayan,
-})
-manny_inputs := common_objects:clone():extend({
-	manny_compiled.object,
-	"elf/build/elf.lib",
-	"elf/build/elf_batteries.lib",
-	"dayan-core/build/dayan.lib",
-})
-common_object_options := " ":join(common_objects)
-common_object_options = f" ${common_object_options}"
-
-build_manny := {
-	name = "link Manny",
-	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
-	inputs = manny_inputs,
-	outputs = { "build/manny.exe" },
-	include_dirs = {},
-	dependencies = manny_dependencies,
-}
 
 stage_c_module := {
 	name = "stage C target module",
@@ -142,53 +13,22 @@ stage_c_module := {
 	inputs = { "c.elf" },
 	outputs = { "build/c.elf" },
 	include_dirs = {},
-	dependencies = { prepare },
+	dependencies = {},
 }
 
-test_suites := {
-	{ name = "base",     source = "tests/test_base.c"     },
-	{ name = "graph",    source = "tests/test_graph.c"    },
-	{ name = "build",    source = "tests/test_build.c"    },
-	{ name = "record",   source = "tests/test_record.c"   },
-	{ name = "compiler", source = "tests/test_compiler.c" },
-	{ name = "script",   source = "tests/test_script.c"   },
+unit_tests := {
+	tasks.targets.base_tests,
+	tasks.targets.graph_tests,
+	tasks.targets.build_tests,
+	tasks.targets.record_tests,
+	tasks.targets.compiler_tests,
+	tasks.targets.script_tests,
 }
 
-test_support := compile_source({
-	name = "test_support", source = "tests/test.c", extra_options = "",
-})
-
-test_targets := {}
-previous_test := {}
-for suite := test_suites[...] ? {
-	compiled := compile_source({
-		name = f"test_${suite.name}", source = suite.source, extra_options = "",
-	})
-	executable := f"build/tests/test_${suite.name}.exe"
-	pdb := f"build/tests/test_${suite.name}.pdb"
-	link := {
-		name = f"link ${suite.name} tests",
-		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
-		inputs = common_objects:clone():extend({
-			test_support.object, compiled.object,
-			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
-		}),
-		outputs = { executable },
-		include_dirs = {},
-		dependencies = common_tasks:clone():extend({
-			test_support.task, compiled.task, prepare_tests, build_elf, build_dayan,
-		}),
-	}
-	run := {
-		name = f"run ${suite.name} tests",
-		command_line = executable,
-		inputs = { executable },
-		outputs = {},
-		include_dirs = {},
-		dependencies = { link }:extend(previous_test),
-	}
-	test_targets = { run }
-	previous_test = { run }
+previous_test := nil
+for test := unit_tests[...] ? {
+	if previous_test != nil ? { test.dependencies:add(previous_test) }
+	previous_test = test
 }
 
 run_c_helper_example := {
@@ -198,7 +38,7 @@ run_c_helper_example := {
 	inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
 	outputs = {},
 	include_dirs = {},
-	dependencies = { build_manny, stage_c_module }:extend(previous_test),
+	dependencies = { tasks.default_task, stage_c_module, previous_test },
 }
 
 run_c_helper_fixture := {
@@ -213,72 +53,32 @@ run_c_helper_fixture := {
 	include_dirs = {},
 	dependencies = { run_c_helper_example },
 }
-test_targets = { run_c_helper_fixture }
-
-stress_compiled := compile_source({
-	name = "test_record_stress", source = "tests/test_record_stress.c", extra_options = "",
-})
-stress_executable := "build/tests/test_record_stress.exe"
-build_stress_tests := {
-	name = "link record stress tests",
-	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
-	inputs = common_objects:clone():extend({
-		test_support.object, stress_compiled.object,
-		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
-	}),
-	outputs = { stress_executable },
-	include_dirs = {},
-	dependencies = common_tasks:clone():extend({
-		test_support.task, stress_compiled.task, prepare_tests, build_elf, build_dayan,
-	}),
-}
-run_stress_tests := {
-	name = "run record stress tests",
-	command_line = stress_executable,
-	inputs = { stress_executable },
-	outputs = {},
-	include_dirs = {},
-	dependencies = { build_stress_tests },
-}
 
 site_targets := elf.load_file("site/site.elf")
 elf.assert(elf.type_of(site_targets) == "table", "site/site.elf must return its targets")
 
 options := {
-	workers   = 4,
+	workers = 4,
 	verbosity = 0,
 }
 
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({
-		targets = { build_manny, stage_c_module },
-		options = options,
-	})
+	ret manny.build({ targets = { tasks.default_task, stage_c_module }, options = options })
 }
 
 entries.test = fun() {
-	ret manny.build({
-		targets = test_targets,
-		options = options,
-	})
+	ret manny.build({ targets = { run_c_helper_fixture }, options = options })
 }
 
 entries.stress = fun() {
-	ret manny.build({
-		targets = { run_stress_tests },
-		options = options,
-	})
+	ret manny.build({ targets = { tasks.targets.record_stress }, options = options })
 }
 
 entries.site = fun() {
-	ret manny.build({
-		targets = site_targets,
-		options = options,
-	})
+	ret manny.build({ targets = site_targets, options = options })
 }
-
 
 format_number := fun(number)
 {
@@ -320,14 +120,14 @@ entries.bless = fun() {
 	elf.printl(f"\x1b[1;33mManny ${manny.version} has been blessed. Go forth and compile.\x1b[0m")
 	elf.printl(f"\x1b[2;36mThe sacred binary rests at ${archive}\x1b[0m")
 
-	manny_commit    := run_line("git rev-parse HEAD")
-	elf_commit      := run_line("git -C elf rev-parse HEAD")
-	dayan_commit     := run_line("git -C dayan-core rev-parse HEAD")
-	hash_result     := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
+	manny_commit := run_line("git rev-parse HEAD")
+	elf_commit := run_line("git -C elf rev-parse HEAD")
+	dayan_commit := run_line("git -C dayan-core rev-parse HEAD")
+	hash_result := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
 	elf.assert(hash_result.success, f"could not hash build/manny.exe\n${hash_result.stderr}")
-	hash_lines      := hash_result.stdout:lines()
+	hash_lines := hash_result.stdout:lines()
 	elf.assert(hash_lines:length() >= 2, "certutil returned invalid hash output")
-	sha256          := hash_lines[1]
+	sha256 := hash_lines[1]
 
 	file_size := format_number(fs.read_text_file("build/manny.exe"):length())
 
@@ -347,4 +147,5 @@ entries.bless = fun() {
 entries.pet = fun() {
 	elf.printl("*purr*")
 }
+
 ret entries

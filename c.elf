@@ -1,9 +1,9 @@
 // C and C++ targets built on Manny's task graph.
 
-configure ::= fun(options) {
+project_to_tasks ::= fun(project, options) {
 	options = options ?? {}
 	style ::= options.style ?? "msvc"
-	elf.assert(style == "msvc" || style == "gnu", "c.configure: style must be 'msvc' or 'gnu'")
+	elf.assert(style == "msvc" || style == "gnu", "C project style must be 'msvc' or 'gnu'")
 
 	default_compiler := "cc"
 	default_archiver := "ar"
@@ -22,7 +22,7 @@ configure ::= fun(options) {
 	common_link_options ::= options.link_options ?? {}
 	executable_suffix ::= options.executable_suffix ?? default_executable_suffix
 
-	elf.assert(elf.fs.create_directories(output_directory), f"c.configure: could not create '${output_directory}'")
+	elf.assert(elf.fs.create_directories(output_directory), f"could not create C project output directory '${output_directory}'")
 
 	quote ::= fun(value) ret f"\"${value}\""
 
@@ -149,7 +149,7 @@ configure ::= fun(options) {
 
 	static_library := fun(description) {
 		name := description.name
-		elf.assert(elf.is_string(name), "c.static_library requires a name")
+		elf.assert(elf.is_string(name), "static_library target requires a name")
 		dependencies := description.dependencies ?? {}
 		dependency_info := dependency_usage(dependencies)
 		compiled := compile_sources(name, description.sources, description, dependency_info)
@@ -191,7 +191,7 @@ configure ::= fun(options) {
 
 	executable := fun(description) {
 		name := description.name
-		elf.assert(elf.is_string(name), "c.executable requires a name")
+		elf.assert(elf.is_string(name), "executable target requires a name")
 		dependencies := description.dependencies ?? {}
 		dependency_info := dependency_usage(dependencies)
 		compiled := compile_sources(name, description.sources, description, dependency_info)
@@ -234,8 +234,8 @@ configure ::= fun(options) {
 	}
 
 	generated_file := fun(description) {
-		elf.assert(elf.is_string(description.name), "c.generated_file requires a name")
-		elf.assert(elf.is_string(description.output), "c.generated_file requires an output")
+		elf.assert(elf.is_string(description.name), "generated_file target requires a name")
+		elf.assert(elf.is_string(description.output), "generated_file target requires an output")
 		program := description.program
 		program_path := program
 		dependencies := (description.dependencies ?? {}):clone()
@@ -268,9 +268,9 @@ configure ::= fun(options) {
 
 	run := fun(description) {
 		target := description.target
-		elf.assert(elf.type_of(target) == "table" && target.kind == "executable", "c.run requires an executable target")
+		elf.assert(elf.type_of(target) == "table" && target.kind == "executable", "run target requires an executable target")
 		arguments := description.arguments ?? {}
-		ret {
+		task := {
 			name = description.name ?? f"run ${target.name}",
 			command_line = append_quoted(quote(target.output), arguments),
 			inputs = { target.output },
@@ -278,6 +278,7 @@ configure ::= fun(options) {
 			include_dirs = {},
 			dependencies = { target.task },
 		}
+		ret { name = task.name, kind = "run", task = task }
 	}
 
 	test := fun(description) {
@@ -287,19 +288,111 @@ configure ::= fun(options) {
 			kind = "test",
 			output = target.output,
 			build_task = target.task,
-			task = run({ target = target, name = f"test ${target.name}", arguments = description.arguments ?? {} }),
+			task = run({ target = target, name = f"test ${target.name}", arguments = description.arguments ?? {} }).task,
 		}
 	}
 
-	ret {
-		static_library = static_library,
-		executable = executable,
-		generated_file = generated_file,
-		run = run,
-		test = test,
+	lower_project := fun(project) {
+		elf.assert(elf.type_of(project) == "table", "c.project_to_tasks requires a project table")
+		elf.assert(elf.type_of(project.targets) == "table", "c.project_to_tasks requires a targets table")
+
+		owners := {}
+		visited_projects := {}
+		index_project := fun(current) {
+			if visited_projects.[current] != nil ? ret
+			visited_projects.[current] = true
+			elf.assert(elf.type_of(current.targets) == "table", "project requires a targets table")
+			for target := current.targets:values()[...] ? { owners.[target] = current }
+			for child := (current.subprojects ?? {}):values()[...] ? { recurse(child) }
+		}
+		index_project(project)
+
+		root_path := fun(owner, path) {
+			root := owner.root ?? "."
+			if root == "." || root == "" ? ret path
+			ret f"${root}/${path}"
+		}
+
+		root_paths := fun(owner, paths) {
+			ret paths:map(fun(path) ret root_path(owner, path))
+		}
+
+		generated := {}
+		lower := fun(description) {
+			elf.assert(elf.type_of(description) == "table", "project targets must be tables")
+			if description.targets != nil ? {
+				elf.assert(description.default_target != nil, f"project '${description.name}' requires a default target")
+				ret recurse(description.default_target)
+			}
+			cached := generated.[description]
+			if cached != nil ? ret cached
+
+			owner := owners.[description]
+			elf.assert(owner != nil, f"target '${description.name}' does not belong to the project tree")
+			kind := description.kind
+			lowered := description:clone()
+			if kind == "generated_file" ? {
+				lowered.inputs = root_paths(owner, description.inputs ?? {})
+				lowered.dependencies = {}
+				for dependency := (description.dependencies ?? {})[...] ? {
+					lowered.dependencies:add(recurse(dependency).task)
+				}
+				if elf.is_string(description.program) ? { lowered.program = root_path(owner, description.program) }
+				else { lowered.program = recurse(description.program) }
+				cached = generated_file(lowered)
+			}
+			else if kind == "run" ? {
+				lowered.target = recurse(description.target)
+				cached = run(lowered)
+			}
+			else {
+				lowered.sources = {}
+				for source := (description.sources ?? {})[...] ? {
+					if elf.is_string(source) ? { lowered.sources:add(root_path(owner, source)) }
+					else if source.kind == "generated_file" ? { lowered.sources:add(recurse(source)) }
+					else {
+						rooted := source:clone()
+						rooted.path = root_path(owner, source.path)
+						rooted.generated_inputs = {}
+						for input := (source.generated_inputs ?? {})[...] ? {
+							rooted.generated_inputs:add(recurse(input))
+						}
+						lowered.sources:add(rooted)
+					}
+				}
+				lowered.private_include_directories = root_paths(owner, description.private_include_directories ?? {})
+				lowered.public_include_directories = root_paths(owner, description.public_include_directories ?? {})
+				lowered.dependencies = {}
+				for dependency := (description.dependencies ?? {})[...] ? {
+					lowered.dependencies:add(recurse(dependency))
+				}
+
+				if kind == "static_library" ? { cached = static_library(lowered) }
+				else if kind == "executable" ? { cached = executable(lowered) }
+				else if kind == "test" ? { cached = test(lowered) }
+				else { elf.assert(false, f"c.project_to_tasks: unknown target kind '${kind}'") }
+			}
+
+			generated.[description] = cached
+			ret cached
+		}
+
+		targets := {}
+		for pair := project.targets:pairs()[...] ? {
+			elf.assert(elf.is_string(pair[0]), "project target names must be strings")
+			targets.[pair[0]] = lower(pair[1]).task
+		}
+
+		default_task := nil
+		if project.default_target != nil ? { default_task = lower(project.default_target).task }
+		ret {
+			name = project.name,
+			default_task = default_task,
+			targets = targets,
+		}
 	}
+
+	ret lower_project(project)
 }
 
-module := configure({})
-module.configure = configure
-ret module
+ret { project_to_tasks = project_to_tasks }

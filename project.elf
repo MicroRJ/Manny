@@ -1,0 +1,128 @@
+elf_project := elf.load_file("elf/project.elf")
+elf_project.root = "elf"
+
+blake3 := {
+	kind = "static_library",
+	name = "blake3",
+	sources = {
+		"blake3/c/blake3.c",
+		"blake3/c/blake3_dispatch.c",
+		"blake3/c/blake3_portable.c",
+	},
+	public_include_directories = { "blake3/c" },
+	defines = {
+		"BLAKE3_NO_SSE2",
+		"BLAKE3_NO_SSE41",
+		"BLAKE3_NO_AVX2",
+		"BLAKE3_NO_AVX512",
+		"BLAKE3_USE_NEON=0",
+	},
+}
+
+core := {
+	kind = "static_library",
+	name = "manny_core",
+	sources = {
+		"src/logger.c",
+		"src/profiler.c",
+		"src/lib/manny_atom.c",
+		"src/lib/manny.c",
+		"src/lib/manny_execution.c",
+		"src/lib/manny_build.c",
+		"src/lib/build_record.c",
+		"src/lib/build_record_stream.c",
+		"src/lib/compiler_command.c",
+		"src/lib/make_depfile.c",
+		"src/lib/vcvars_cache.c",
+		"src/script.c",
+		"src/scripts/elf_adapter.c",
+		"src/platform_adapter.c",
+	},
+	public_include_directories = { "src", "src/lib" },
+	dependencies = { blake3, elf_project },
+}
+
+executable := {
+	kind = "executable",
+	name = "manny",
+	sources = { "src/manny_main.c" },
+	dependencies = { core },
+}
+
+test_support := {
+	kind = "static_library",
+	name = "manny_test_support",
+	sources = { "tests/test.c" },
+	dependencies = { core },
+}
+
+base_tests := {
+	kind = "test",
+	name = "test_base",
+	sources = { "tests/test_base.c" },
+	dependencies = { test_support },
+}
+
+graph_tests := {
+	kind = "test",
+	name = "test_graph",
+	sources = { "tests/test_graph.c" },
+	dependencies = { test_support },
+}
+
+build_tests := {
+	kind = "test",
+	name = "test_build",
+	sources = { "tests/test_build.c" },
+	dependencies = { test_support },
+}
+
+record_tests := {
+	kind = "test",
+	name = "test_record",
+	sources = { "tests/test_record.c" },
+	dependencies = { test_support },
+}
+
+compiler_tests := {
+	kind = "test",
+	name = "test_compiler",
+	sources = { "tests/test_compiler.c" },
+	dependencies = { test_support },
+}
+
+script_tests := {
+	kind = "test",
+	name = "test_script",
+	sources = { "tests/test_script.c" },
+	dependencies = { test_support },
+}
+
+record_stress := {
+	kind = "test",
+	name = "test_record_stress",
+	sources = { "tests/test_record_stress.c" },
+	dependencies = { test_support },
+}
+
+ret {
+	name = "manny",
+	root = ".",
+	subprojects = {
+		elf = elf_project,
+	},
+	default_target = executable,
+	targets = {
+		blake3 = blake3,
+		core = core,
+		executable = executable,
+		test_support = test_support,
+		base_tests = base_tests,
+		graph_tests = graph_tests,
+		build_tests = build_tests,
+		record_tests = record_tests,
+		compiler_tests = compiler_tests,
+		script_tests = script_tests,
+		record_stress = record_stress,
+	},
+}

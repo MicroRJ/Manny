@@ -1,34 +1,57 @@
 ---
-title: C and C++ targets
+title: C and C++ projects
 label: Guide
-description: Manny's optional high-level helpers for C and C++ targets.
+description: Turning a C or C++ project into Manny tasks.
 ---
 
-`c.elf` turns target descriptions into ordinary Manny tasks. It does not own a
-scheduler or incremental state; `manny.build()` still executes the resulting
-graph.
-
-Load the module shipped beside the Manny executable and configure it once:
+`c.elf` takes a project description and returns ordinary Manny tasks. It does
+not own a scheduler or incremental state; `manny.build()` still executes the
+resulting graph.
 
 ```elf
-c ::= manny.load("c")
+math := {
+	kind = "static_library",
+	name = "math",
+	sources = { "src/add.c", "src/multiply.c" },
+	public_include_directories = { "include" },
+}
+
+app := {
+	kind = "executable",
+	name = "calculator",
+	sources = { "src/main.c" },
+	dependencies = { math },
+}
+
+project := {
+	name = "calculator",
+	default_target = app,
+	targets = {
+		math = math,
+		app = app,
+	},
+}
+
+tasks := manny.load("c").project_to_tasks(project)
+
+entries := {}
+entries.build = fun() ret manny.build({ targets = { tasks.default_task } })
+ret entries
 ```
 
-`manny.load()` only exposes modules shipped with Manny. To pin or modify the
-helper, vendor `c.elf` in the project and use `elf.load_file()` instead.
+The project and its targets are plain tables. `project_to_tasks()` processes the
+whole project and returns its default task plus a named task table.
 
-The default configuration uses `clang-cl`, `lib`, `build`, and MSVC-style
-command-line options. Every default can be replaced:
+The default toolchain is `clang-cl`, `lib`, `build`, and MSVC-style command-line
+options. Pass options with the project when those defaults do not fit:
 
 ```elf
-c_module ::= manny.load("c")
-c ::= c_module.configure({
+tasks := manny.load("c").project_to_tasks(project, {
 	style = "gnu",
 	compiler = "gcc",
 	archiver = "ar",
 	output_directory = "build/debug",
 	compile_options = { "-std=c11", "-Wall", "-O0", "-g" },
-	link_options = {},
 	executable_suffix = ".exe",
 })
 ```
@@ -36,34 +59,10 @@ c ::= c_module.configure({
 The GNU command dialect is available for experimentation. Manny's supported
 host is currently Windows x64.
 
-## Targets
+Target kinds currently include `static_library`, `executable`, `test`, `run`,
+and `generated_file`.
 
-Build a static library and consume it:
-
-```elf
-math ::= c.static_library({
-	name = "math",
-	sources = { "src/add.c", "src/multiply.c" },
-	public_include_directories = { "include" },
-})
-
-app ::= c.executable({
-	name = "calculator",
-	sources = { "src/main.c" },
-	dependencies = { math },
-})
-
-entries := {}
-entries.build = fun() {
-	ret manny.build({ targets = { app.task } })
-}
-ret entries
-```
-
-A target contains its final `task`, its `output` path, and usage requirements
-that propagate through `dependencies`.
-
-The target fields are:
+Common target fields are:
 
 - `name`
 - `sources`
@@ -78,30 +77,33 @@ The target fields are:
 - `public_link_options`
 - `generated_inputs`
 
-Private fields affect only the target. Public fields are also applied to targets
-that depend on it.
+Private fields affect only that target. Public fields propagate to targets that
+depend on it.
 
 ## Generated files
 
-A generator can be an executable target or a program path. Its arguments may be
-a function so they can use the final output path without placeholders:
+A generator can be another target or a program path. Its arguments may use the
+final output path directly:
 
 ```elf
-codegen ::= c.executable({
+codegen := {
+	kind = "executable",
 	name = "codegen",
 	sources = { "tools/codegen.c" },
-})
+}
 
-version_header ::= c.generated_file({
+version_header := {
+	kind = "generated_file",
 	name = "generate version header",
 	program = codegen,
 	output = "generated/version.h",
 	arguments = fun(output) {
 		ret { output }
 	},
-})
+}
 
-core ::= c.static_library({
+core := {
+	kind = "static_library",
 	name = "core",
 	sources = {
 		{
@@ -109,36 +111,46 @@ core ::= c.static_library({
 			generated_inputs = { version_header },
 		},
 	},
-})
+}
 ```
 
-A generated C or C++ source can be placed directly in `sources`. Generated
+Every referenced target must also appear in the project's `targets` table.
+Generated C or C++ sources can be placed directly in `sources`. Generated
 headers belong in `generated_inputs` on the target or only on the source that
 includes them.
 
 ## Running and testing
 
-`c.run()` creates a task with no outputs, so it runs whenever selected:
+A `run` target has no outputs, so it runs whenever selected:
 
 ```elf
-run ::= c.run({ target = app, arguments = { "--version" } })
+run := {
+	kind = "run",
+	name = "run calculator",
+	target = app,
+	arguments = { "--version" },
+}
+
 entries.run = fun() {
-	ret manny.build({ targets = { run } })
+	ret manny.build({ targets = { tasks.targets.run } })
 }
 ```
 
-`c.test()` combines an executable target and a run task:
+A `test` target builds and runs an executable:
 
 ```elf
-tests ::= c.test({
+tests := {
+	kind = "test",
 	name = "math_tests",
 	sources = { "tests/math_tests.c" },
 	dependencies = { math },
-})
+}
 
 entries.test = fun() {
-	ret manny.build({ targets = { tests.task } })
+	ret manny.build({ targets = { tasks.targets.tests } })
 }
 ```
 
-Raw Manny tasks and helper-generated targets can freely depend on one another.
+Add `run` and `tests` to the project's named `targets` table before lowering it.
+The resulting tasks are ordinary Manny task tables and can depend on raw tasks,
+or be dependencies of raw tasks.

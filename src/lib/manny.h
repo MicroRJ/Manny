@@ -58,9 +58,9 @@ struct Manny_Node_Context
 
 typedef struct Manny_Node_Desc
 {
-	String             name;
+	String               name;
 	Manny_Node_Function *function;
-	void              *user_data;
+	void                *user_data;
 }
 Manny_Node_Desc;
 
@@ -84,8 +84,8 @@ typedef void Manny_Event_Function(Manny_Event event, void *user_data);
 
 typedef struct Manny_Exec_Params
 {
-	u32                 worker_count;
-	void               *user_data;
+	u32                   worker_count;
+	void                 *user_data;
 	Manny_Event_Function *event;
 }
 Manny_Exec_Params;
@@ -101,8 +101,8 @@ String manny_copy_string(Manny *manny, String string);
 Manny_Error manny_add_node(Manny *manny, Manny_Node_Desc description, Manny_Node **node_out);
 
 // TODO(RJ): these are to be removed entirely, nodes will have the deps capacity
-// fixed at creation time, there's no need for node's to remain dynamic. Eventually,
-// nodes will become entirely readonly.
+// fixed at creation time, there's no need for node's to remain dynamic.
+// Eventually, nodes will become entirely readonly.
 Manny_Error manny_set_node(Manny *manny, Manny_Node *node, Manny_Node_Desc description);
 Manny_Error manny_set_node_action(Manny *manny, Manny_Node *node, Manny_Node_Function *function, void *user_data);
 Manny_Error manny_add_dependency(Manny *manny, Manny_Node *node, Manny_Node *dependency);
@@ -115,7 +115,7 @@ Manny_Node_Function *manny_node_function(const Manny_Node *node);
 u32 manny_dependency_count(const Manny_Node *node);
 Manny_Node *manny_dependency(const Manny_Node *node, u32 index);
 
-// TODO(RJ): build tasks use user_data why couldn't we allocate parallel arrays?
+// TODO(RJ): remove this too, build tasks use user_data why couldn't we allocate parallel arrays?
 void *manny_node_user_data(const Manny_Node *node);
 
 Manny_Error manny_execution_create(Manny *manny, Manny_Execution **execution_out);

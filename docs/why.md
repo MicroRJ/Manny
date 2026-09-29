@@ -59,28 +59,36 @@ It receives the work and builds it.
 
 Manny handles parallel execution, compiler-discovered dependencies, fingerprints, persistent state, interruption, failure propagation, and explaining why something rebuilt. The script remains free to generate the graph however it wants.
 
-Writing every compile and link task by hand gets old, so I added a helper:
+Writing every compile and link task by hand gets old, so I added a project
+lowerer:
 
 ```elf
-c ::= manny.load("c")
-
-hello ::= c.executable({
+hello := {
+	kind = "executable",
 	name = "hello",
 	sources = { "main.c", "message.c" },
-})
+}
+
+project := {
+	name = "hello",
+	default_target = hello,
+	targets = { hello = hello },
+}
+
+tasks := manny.load("c").project_to_tasks(project)
 
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({ targets = { hello.task } })
+	ret manny.build({ targets = { tasks.default_task } })
 }
 
 ret entries
 ```
 
-`manny.load("c")` loads `c.elf`, an ordinary elf script shipped beside Manny. `c.executable()` loops over the sources, generates the raw compilation tasks, generates the link task, connects their dependencies, and gives the script that final task back.
+`manny.load("c")` loads `c.elf`, an ordinary elf script shipped beside Manny. `project_to_tasks()` processes the project, generates the raw compilation and link tasks, connects their dependencies, and gives the script those tasks back.
 
-The build engine does not know that `c.executable()` exists. There is no privileged C project system hiding underneath it. The helper produces the same tables I could have written by hand.
+The build engine does not know that `project_to_tasks()` exists. There is no privileged C project system hiding underneath it. The helper produces the same tables I could have written by hand.
 
 It is convenient, not mandatory. Use it, change it, replace it, or ignore it completely.
 
