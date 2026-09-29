@@ -100,39 +100,13 @@ for source := blake3_sources[...] ? {
 	common_objects:add(compiled.object)
 }
 
-build_dayan := {
-	name = "build Dayan library",
-	command_line = "cmd /c \"cd /d dayan-core && ..\\blessed\\manny.exe build.elf lib\"",
-	inputs = {
-		"dayan-core/build.elf",
-		"dayan-core/include/dayan.h",
-		"dayan-core/src/dayan.c",
-		"dayan-core/src/dayan_memory.c",
-		"dayan-core/src/dayan_memory.h",
-		"dayan-core/src/win32/dayan_memory.c",
-		"dayan-core/src/dayan_file.c",
-		"dayan-core/src/win32/dayan_file.c",
-		"dayan-core/src/dayan_path.c",
-		"dayan-core/src/win32/dayan_path.c",
-		"dayan-core/src/dayan_env.c",
-		"dayan-core/src/win32/dayan_env.c",
-		"dayan-core/src/dayan_process.c",
-		"dayan-core/src/win32/dayan_process.c",
-		"dayan-core/src/dayan_thread.c",
-		"dayan-core/src/win32/dayan_thread.c",
-		"dayan-core/src/dayan_time.c",
-		"dayan-core/src/win32/dayan_time.c",
-		"dayan-core/src/dayan_console.c",
-		"dayan-core/src/win32/dayan_console.c",
-		"dayan-core/src/dayan_error.c",
-		"dayan-core/src/win32/dayan_error.c",
-		"dayan-core/src/win32/dayan_win32.h",
-	},
-	outputs = { "dayan-core/build/dayan.lib" },
-	include_dirs = {},
-	dependencies = {},
-	transparent = true,
-}
+dayan_module := elf.load_file("dayan-core/dayan.elf")
+dayan_graph := dayan_module.create({
+	root = "dayan-core",
+	output_directory = "dayan-core/build",
+	compiler = cc,
+})
+build_dayan := dayan_graph.library.task
 
 manny_compiled := compile_source({
 	name = "manny_main",
