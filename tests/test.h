@@ -8,7 +8,6 @@
 #include "make_depfile.h"
 #include "logger.h"
 #include "platform_adapter.h"
-#include "platform.h"
 #include "vcvars_cache.h"
 #include "blake3.h"
 

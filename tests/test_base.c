@@ -38,10 +38,10 @@ cleanup:
 
 static b32 test_high_resolution_timer(void)
 {
-    u64 frequency = platform_counter_frequency();
-    u64 before = platform_counter();
+    u64 frequency = day_counter_frequency();
+    u64 before = day_counter();
     Sleep(1);
-    return frequency > 0 && platform_counter() >= before && day_current_thread_id() != 0;
+    return frequency > 0 && day_counter() >= before && day_current_thread_id() != 0;
 }
 
 static b32 test_blake3(void)

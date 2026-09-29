@@ -1,5 +1,4 @@
 #include "platform_adapter.h"
-#include "platform.h"
 
 #define MANNY_PLATFORM_ERROR_OUT_OF_MEMORY UINT32_MAX
 
@@ -169,19 +168,7 @@ failure:
 b32 manny_platform_error_message(u32 error_code, Arena *arena, String *result)
 {
 	if (!error_code || !arena || !result) return false;
-	Platform_String_Result query = platform_error_message(error_code, NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	u64 mark = arena_mark(arena);
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result read = platform_error_message(error_code, data, query.required_capacity);
-	if (read.error || !arena_push(arena, query.required_capacity)) {
-		arena_restore(arena, mark);
-		return false;
-	}
-	result->data = data;
-	result->size = read.size;
-	return true;
+	return day_error_message(arena, error_code, result).error == DAY_ERROR_NONE;
 }
 
 static day_Mutex manny_output_mutex;
@@ -193,13 +180,13 @@ void manny_platform_enable_console_colors(void)
 		day_init_mutex(&manny_output_mutex);
 		manny_output_mutex_initialized = true;
 	}
-	platform_enable_console_colors(PLATFORM_STANDARD_OUTPUT);
-	platform_enable_console_colors(PLATFORM_STANDARD_ERROR);
+	day_enable_console_colors(DAY_STANDARD_OUTPUT);
+	day_enable_console_colors(DAY_STANDARD_ERROR);
 }
 
 b32 manny_platform_console_supports_colors(b32 error_stream)
 {
-	return platform_console_supports_colors(error_stream ? PLATFORM_STANDARD_ERROR : PLATFORM_STANDARD_OUTPUT);
+	return day_console_supports_colors(error_stream ? DAY_STANDARD_ERROR : DAY_STANDARD_OUTPUT);
 }
 
 void manny_platform_output_lock(void)
