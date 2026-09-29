@@ -66,7 +66,7 @@ Build_Event_Test;
 static void build_test_event(Manny_Event event, void *user_data)
 {
 	Build_Event_Test *test = user_data;
-	if (platform_current_thread_id() != test->callback_thread || event.node != test->node) test->valid = false;
+	if (day_current_thread_id() != test->callback_thread || event.node != test->node) test->valid = false;
 	if (event.type == MANNY_EVENT_STARTED) ++test->started;
 	else if (event.type == MANNY_EVENT_COMPLETED) {
 		if (!event.result.succeeded || !event.result.output) test->valid = false;
@@ -83,7 +83,7 @@ static b32 test_builder_events(void)
 	Manny_Task_Desc task = {0};
 	Build_Event_Test event = {
 		.node = node,
-		.callback_thread = platform_current_thread_id(),
+		.callback_thread = day_current_thread_id(),
 		.valid = true,
 	};
 	char executable[MAX_PATH];

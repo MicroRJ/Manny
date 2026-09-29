@@ -184,13 +184,13 @@ b32 manny_platform_error_message(u32 error_code, Arena *arena, String *result)
 	return true;
 }
 
-static Platform_Mutex manny_output_mutex;
+static day_Mutex manny_output_mutex;
 static b32 manny_output_mutex_initialized;
 
 void manny_platform_enable_console_colors(void)
 {
 	if (!manny_output_mutex_initialized) {
-		platform_init_mutex(&manny_output_mutex);
+		day_init_mutex(&manny_output_mutex);
 		manny_output_mutex_initialized = true;
 	}
 	platform_enable_console_colors(PLATFORM_STANDARD_OUTPUT);
@@ -204,10 +204,10 @@ b32 manny_platform_console_supports_colors(b32 error_stream)
 
 void manny_platform_output_lock(void)
 {
-	platform_lock_mutex(&manny_output_mutex);
+	day_lock_mutex(&manny_output_mutex);
 }
 
 void manny_platform_output_unlock(void)
 {
-	platform_unlock_mutex(&manny_output_mutex);
+	day_unlock_mutex(&manny_output_mutex);
 }

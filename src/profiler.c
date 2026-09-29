@@ -45,7 +45,7 @@ void profiler_reset(void)
 	atomic_fetch_add_explicit(&profile_generation, 1, memory_order_relaxed);
 	profile_frequency = platform_counter_frequency();
 	profile_start = platform_counter();
-	main_thread_id = platform_current_thread_id();
+	main_thread_id = day_current_thread_id();
 }
 
 
@@ -58,7 +58,7 @@ static Thread_Profile *get_thread_profile(void)
 	if (index >= MAX_PROFILE_THREADS) return NULL;
 	local_profile = &thread_profiles[index];
 	local_profile_generation = generation;
-	local_profile->thread_id = platform_current_thread_id();
+	local_profile->thread_id = day_current_thread_id();
 	return local_profile;
 }
 
