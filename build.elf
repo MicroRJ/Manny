@@ -1,11 +1,12 @@
-c_module := elf.load_file("c.elf")
-project := elf.load_file("project.elf")
-
-tasks := c_module.project_to_tasks(project, {
-	compiler = "clang-cl",
-	output_directory = "build",
-	compile_options = { "/std:c11", "/Zi", "/Od" },
-})
+load_project_tasks ::= fun() {
+	c_module := elf.load_file("c.elf")
+	project := elf.load_file("project.elf")
+	ret c_module.project_to_tasks(project, {
+		compiler = "clang-cl",
+		output_directory = "build",
+		compile_options = { "/std:c11", "/Zi", "/Od" },
+	})
+}
 
 stage_c_module := {
 	name = "stage C target module",
@@ -16,42 +17,44 @@ stage_c_module := {
 	dependencies = {},
 }
 
-unit_tests := {
-	tasks.targets.base_tests,
-	tasks.targets.graph_tests,
-	tasks.targets.build_tests,
-	tasks.targets.record_tests,
-	tasks.targets.compiler_tests,
-	tasks.targets.script_tests,
-}
+make_test_target ::= fun(tasks) {
+	unit_tests := {
+		tasks.targets.base_tests,
+		tasks.targets.graph_tests,
+		tasks.targets.build_tests,
+		tasks.targets.record_tests,
+		tasks.targets.compiler_tests,
+		tasks.targets.script_tests,
+	}
 
-previous_test := nil
-for test := unit_tests[...] ? {
-	if previous_test != nil ? { test.dependencies:add(previous_test) }
-	previous_test = test
-}
+	previous_test := nil
+	for test := unit_tests[...] ? {
+		if previous_test != nil ? { test.dependencies:add(previous_test) }
+		previous_test = test
+	}
 
-run_c_helper_example := {
-	name = "run C helper example",
-	command_line = "build\\manny.exe build.elf run",
-	working_directory = "example",
-	inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
-	outputs = {},
-	include_dirs = {},
-	dependencies = { tasks.default_task, stage_c_module, previous_test },
-}
+	run_c_helper_example := {
+		name = "run C helper example",
+		command_line = "build\\manny.exe build.elf run",
+		working_directory = "example",
+		inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
+		outputs = {},
+		include_dirs = {},
+		dependencies = { tasks.default_task, stage_c_module, previous_test },
+	}
 
-run_c_helper_fixture := {
-	name = "run C helper integration test",
-	command_line = "build\\manny.exe build.elf test",
-	working_directory = "tests/fixtures/c_helper",
-	inputs = {
-		"../../../build/manny.exe", "../../../c.elf", "build.elf", "codegen.c",
-		"fixture.c", "fixture_test.c", "main.c", "include/fixture.h",
-	},
-	outputs = {},
-	include_dirs = {},
-	dependencies = { run_c_helper_example },
+	ret {
+		name = "run C helper integration test",
+		command_line = "build\\manny.exe build.elf test",
+		working_directory = "tests/fixtures/c_helper",
+		inputs = {
+			"../../../build/manny.exe", "../../../c.elf", "build.elf", "codegen.c",
+			"fixture.c", "fixture_test.c", "main.c", "include/fixture.h",
+		},
+		outputs = {},
+		include_dirs = {},
+		dependencies = { run_c_helper_example },
+	}
 }
 
 site_targets := elf.load_file("site/site.elf")
@@ -65,14 +68,17 @@ options := {
 entries := {}
 
 entries.build = fun() {
+	tasks := load_project_tasks()
 	ret manny.build({ targets = { tasks.default_task, stage_c_module }, options = options })
 }
 
 entries.test = fun() {
-	ret manny.build({ targets = { run_c_helper_fixture }, options = options })
+	tasks := load_project_tasks()
+	ret manny.build({ targets = { make_test_target(tasks) }, options = options })
 }
 
 entries.stress = fun() {
+	tasks := load_project_tasks()
 	ret manny.build({ targets = { tasks.targets.record_stress }, options = options })
 }
 
