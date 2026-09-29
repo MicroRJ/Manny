@@ -207,7 +207,7 @@ static b32 test_directory_output_stays_clean(void)
 	Manny_Node *prepare;
 	Manny_Node *write_child;
 
-	CHECK(platform_remove_tree(directory));
+	CHECK(!day_remove_tree(string_from_cstring(directory)).error);
 	build = manny_build_create();
 	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
@@ -229,7 +229,7 @@ static b32 test_directory_output_stays_clean(void)
 	manny_build_destroy(build);
 	CHECK(manny_platform_file_info(string_from_cstring(child), &after));
 	CHECK(after.modified_unix_ms == before.modified_unix_ms);
-	CHECK(platform_remove_tree(directory));
+	CHECK(!day_remove_tree(string_from_cstring(directory)).error);
 	return true;
 }
 
@@ -251,7 +251,7 @@ static b32 test_task_fingerprint_rebuilds(void)
 	Manny_Build *build;
 	Manny *graph;
 
-	CHECK(platform_remove_file(output_path));
+	CHECK(!day_remove_file(string_from_cstring(output_path)).error);
 	build = manny_build_create();
 	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
@@ -292,7 +292,7 @@ static b32 test_task_fingerprint_rebuilds(void)
 	CHECK(manny_platform_file_info(string_from_cstring(output_path), &metadata_changed));
 	CHECK(metadata_changed.modified_unix_ms != command_changed.modified_unix_ms);
 
-	CHECK(platform_remove_file(output_path));
+	CHECK(!day_remove_file(string_from_cstring(output_path)).error);
 	return true;
 }
 
@@ -327,7 +327,7 @@ static b32 test_newer_input_rebuilds(void)
 	Manny_Platform_File_Info output_info;
 
 	CHECK(write_test_file_at_time(input_path, 0ULL));
-	CHECK(platform_remove_file(output_path));
+	CHECK(!day_remove_file(string_from_cstring(output_path)).error);
 	task.command_line = LIT("cmd /c echo rebuilt>build\\newer_input_test.out");
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
@@ -368,8 +368,8 @@ static b32 test_multiple_inputs_and_outputs(void)
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(input_a, 100ULL));
     CHECK(write_test_file_at_time(input_b, 150ULL));
-	CHECK(platform_remove_file(output_a));
-	CHECK(platform_remove_file(output_b));
+	CHECK(!day_remove_file(string_from_cstring(output_a)).error);
+	CHECK(!day_remove_file(string_from_cstring(output_b)).error);
 	task.command_line = LIT("cmd /c echo a>build\\multi_a.out && echo b>build\\multi_b.out && echo rebuilt>build\\multi.marker");
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
@@ -433,8 +433,8 @@ static b32 test_dependency_rebuild_propagates(void)
 
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(dependency_input, 100ULL));
-	CHECK(platform_remove_file(dependency_output));
-	CHECK(platform_remove_file(parent_output));
+	CHECK(!day_remove_file(string_from_cstring(dependency_output)).error);
+	CHECK(!day_remove_file(string_from_cstring(parent_output)).error);
 
 	tasks[0].command_line = LIT("cmd /c echo dependency>build\\dependency.out");
     tasks[0].inputs = STRING_ARRAY_FROM(dependency_inputs);
@@ -474,7 +474,7 @@ static b32 test_transparent_dependency(void)
 	const char *parent_output = "build\\transparent_parent.out";
 	String parent_outputs[] = { string_from_cstring(parent_output) };
 	Manny_Task_Desc tasks[2] = {0};
-	CHECK(platform_remove_file(parent_output));
+	CHECK(!day_remove_file(string_from_cstring(parent_output)).error);
 	tasks[0].command_line = LIT("cmd /c exit /b 0");
 	tasks[0].transparent = true;
 	tasks[1].command_line = LIT("cmd /c echo parent>build\\transparent_parent.out");

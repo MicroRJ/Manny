@@ -144,11 +144,11 @@ static b32 test_compiler_dependency_state(void)
 
 	CHECK_DEPENDENCY_STATE(arena.data);
 	CHECK_DEPENDENCY_STATE(manny_platform_current_directory(&arena, &original_directory));
-	CHECK_DEPENDENCY_STATE(platform_remove_tree("build\\compiler_dependency_state"));
-	CHECK_DEPENDENCY_STATE(platform_create_directories("build\\compiler_dependency_state"));
-	CHECK_DEPENDENCY_STATE(platform_set_current_directory("build\\compiler_dependency_state"));
+	CHECK_DEPENDENCY_STATE(!day_remove_tree(LIT("build/compiler_dependency_state")).error);
+	CHECK_DEPENDENCY_STATE(!day_create_directories(LIT("build/compiler_dependency_state")).error);
+	CHECK_DEPENDENCY_STATE(!day_set_current_directory(LIT("build/compiler_dependency_state")).error);
 	changed_directory = true;
-	CHECK_DEPENDENCY_STATE(platform_create_directories("work"));
+	CHECK_DEPENDENCY_STATE(!day_create_directories(LIT("work")).error);
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\header.h", "#define VALUE 1\n", 100ULL));
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\source.c",
 		"#include \"header.h\"\nint dependency_value = VALUE;\n", 100ULL));
@@ -168,7 +168,7 @@ static b32 test_compiler_dependency_state(void)
 	CHECK_DEPENDENCY_STATE(before.modified_unix_ms != after.modified_unix_ms);
 
 	CHECK_DEPENDENCY_STATE(write_test_text_at_time("work\\header.h", "#define VALUE 3\n", 100ULL));
-	CHECK_DEPENDENCY_STATE(platform_remove_file(".manny\\state"));
+	CHECK_DEPENDENCY_STATE(!day_remove_file(LIT(".manny/state")).error);
 	Sleep(20);
 	CHECK_DEPENDENCY_STATE(run_single_task(&task, "rebuild missing compiler state"));
 	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &after));
@@ -181,7 +181,7 @@ static b32 test_compiler_dependency_state(void)
 	CHECK_DEPENDENCY_STATE(manny_platform_file_info(LIT("work/object.obj"), &before));
 	CHECK_DEPENDENCY_STATE(before.modified_unix_ms != after.modified_unix_ms);
 
-	CHECK_DEPENDENCY_STATE(platform_remove_file("work\\header.h"));
+	CHECK_DEPENDENCY_STATE(!day_remove_file(LIT("work/header.h")).error);
 	CHECK_DEPENDENCY_STATE(!run_single_task(&task, "rebuild missing compiler dependency"));
 	CHECK_DEPENDENCY_STATE(!manny_platform_file_info(
 		LIT("work/object.obj.d.tmp"), &after));
@@ -194,12 +194,12 @@ static b32 test_compiler_dependency_state(void)
 
 cleanup:
 	if (changed_directory) {
-		platform_remove_tree(".manny");
-		platform_remove_tree("work");
-		if (!platform_set_current_directory(original_directory.data)) result = false;
-		else platform_remove_tree("build\\compiler_dependency_state");
+		day_remove_tree(LIT(".manny"));
+		day_remove_tree(LIT("work"));
+		if (day_set_current_directory(original_directory).error) result = false;
+		else day_remove_tree(LIT("build/compiler_dependency_state"));
 	}
-	else platform_remove_tree("build\\compiler_dependency_state");
+	else day_remove_tree(LIT("build/compiler_dependency_state"));
 	arena_destroy(&arena);
 #undef CHECK_DEPENDENCY_STATE
 	return result;

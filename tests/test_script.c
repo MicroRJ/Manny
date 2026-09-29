@@ -36,14 +36,14 @@ static b32 test_elf_descriptor(void)
     Script_Build build;
     Manny *graph;
 
-    CHECK(platform_create_directories("build"));
+    CHECK(!day_create_directories(LIT("build")).error);
     CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     if (!script_load_build(path, &build)) {
-        platform_remove_file(path.data);
+        day_remove_file(path);
         printf("  elf error: %s\n", build.error);
         return false;
     }
-    CHECK(platform_remove_file(path.data));
+    CHECK(!day_remove_file(path).error);
     graph = manny_build_graph(build.build);
 	CHECK(string_ends_with(manny_path_string(build.build, manny_build_root(build.build)), LIT("/build")));
     CHECK(manny_task_count(build.build) == 4);
@@ -80,14 +80,14 @@ static b32 test_elf_generated_descriptor(void)
     Script_Build build;
     Manny *graph;
 
-    CHECK(platform_create_directories("build"));
+    CHECK(!day_create_directories(LIT("build")).error);
     CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     if (!script_load_build(path, &build)) {
-        platform_remove_file(path.data);
+        day_remove_file(path);
         printf("  elf error: %s\n", build.error);
         return false;
     }
-    CHECK(platform_remove_file(path.data));
+    CHECK(!day_remove_file(path).error);
     graph = manny_build_graph(build.build);
     CHECK(manny_task_count(build.build) == 8);
     CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 0))), LIT("generated 7")));
@@ -138,10 +138,10 @@ static b32 test_script_functions(void)
         "ret {build = build, clean = clean}\n";
     String path = LIT("build/test_script_functions.elf");
     Arena arena = arena_create(MEGABYTES(16));
-    CHECK(platform_create_directories("build"));
+    CHECK(!day_create_directories(LIT("build")).error);
     CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
     Script *script = script_load(&arena, path);
-    CHECK(platform_remove_file(path.data));
+    CHECK(!day_remove_file(path).error);
     CHECK(script_is_loaded(script));
     String_Array functions = script_functions(script);
     CHECK(functions.count == 2);

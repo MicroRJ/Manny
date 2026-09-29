@@ -1,7 +1,6 @@
 #include "build_record_stream.h"
 #include "build_record_internal.h"
 #include "platform_adapter.h"
-#include "platform.h"
 
 #include <string.h>
 
@@ -488,14 +487,15 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 
 static b32 build_record_stream_append_bytes(String path, const void *data, u64 size)
 {
-	Platform_File file;
+	day_File file;
+	u64 position;
 	u64 written = 0;
 	b32 result;
 	if (!string_is_terminated(path) || (!data && size)) return false;
-	file = platform_access_file(path.data, PLATFORM_FILE_OPEN_EXISTING, PLATFORM_FILE_WRITE | PLATFORM_FILE_SHARE_READ);
-	if (!platform_file_is_valid(file)) return false;
-	result = platform_set_file_cursor(file, PLATFORM_SEEK_END, 0, NULL) && platform_write_file(file, data, size, &written) && written == size;
-	platform_close_file(file);
+	if (day_access_file(path, DAY_FILE_OPEN_EXISTING, DAY_FILE_WRITE | DAY_FILE_SHARE_READ, &file).error) return false;
+	result = !day_set_file_cursor(file, DAY_SEEK_END, 0, &position).error &&
+		!day_write_file(file, data, size, &written).error && written == size;
+	if (day_close_file(file).error) result = false;
 	return result;
 }
 
@@ -616,8 +616,7 @@ b32 build_record_stream_compact(Build_Record_Stream *stream, String path)
 	if (!arena.data) goto done;
 	parent = build_record_parent_directory(path);
 	if (parent.size) {
-		parent = str_push_copy(&arena, parent);
-		if (!parent.data || !platform_create_directories(parent.data)) goto done;
+		if (day_create_directories(parent).error) goto done;
 	}
 	{
 		void *start = arena_top(&arena);
@@ -628,11 +627,11 @@ b32 build_record_stream_compact(Build_Record_Stream *stream, String path)
 	}
 	if (!build_record_stream_encode_with_paths(&arena, stream, &compacted, &encoded)) goto done;
 	if (!manny_platform_write_entire_file(temporary, encoded.data, (size_t)encoded.size)) goto done;
-	if (!platform_move_file(temporary.data, path.data, true)) goto done;
+	if (day_move_file(temporary, path, true).error) goto done;
 	result = true;
 
 	done:
-	if (!result && temporary.data) platform_remove_file(temporary.data);
+	if (!result && temporary.data) day_remove_file(temporary);
 	if (result) build_record_stream_replace_paths(stream, &compacted);
 	else arena_restore(stream->arena, mark);
 	arena_destroy(&arena);

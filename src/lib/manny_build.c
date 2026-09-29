@@ -4,7 +4,6 @@
 #include "logger.h"
 #include "make_depfile.h"
 #include "platform_adapter.h"
-#include "platform.h"
 #include "profiler.h"
 #include "blake3.h"
 
@@ -116,21 +115,9 @@ static b32 manny_path_is_absolute(String path)
 		(path.size >= 3 && path.data[1] == ':' && (path.data[2] == '/' || path.data[2] == '\\')));
 }
 
-static b32 manny_path_platform_absolute(Arena *arena, String path, String *result)
+static b32 manny_path_absolute(Arena *arena, String path, String *result)
 {
-	String terminated = path;
-	if (!string_is_terminated(terminated)) {
-		terminated = str_push_copy(arena, path);
-		if (!terminated.data) return false;
-	}
-	Platform_String_Result query = platform_get_absolute_path(terminated.data, NULL, 0);
-	if (query.error || query.required_capacity == 0) return false;
-	char *data = arena_reserve(arena, query.required_capacity);
-	if (!data) return false;
-	Platform_String_Result filled = platform_get_absolute_path(terminated.data, data, query.required_capacity);
-	if (filled.error || !arena_push(arena, query.required_capacity)) return false;
-	*result = string_from_data(data, filled.size);
-	return true;
+	return !day_get_absolute_path(arena, path, result).error;
 }
 
 static String manny_path_normalize_separators(String path)
@@ -167,7 +154,7 @@ b32 manny_path_resolve(Manny_Build *build, Manny_Path directory, String source, 
 		arena_finalize_string(scratch.arena, candidate);
 	}
 	String absolute;
-	if (!manny_path_platform_absolute(scratch.arena, candidate, &absolute)) goto failure;
+	if (!manny_path_absolute(scratch.arena, candidate, &absolute)) goto failure;
 	absolute = manny_path_normalize_separators(absolute);
 	if (!absolute.data || absolute.size == 0) goto failure;
 	Manny_Atom atom = manny_interner_intern(build->interner, absolute);
@@ -223,7 +210,7 @@ Manny_Build *manny_build_create_at(String root)
 
 	String absolute;
 	Scratch scratch = begin_scratch();
-	if (!root.data || root.size == 0 || !manny_path_platform_absolute(scratch.arena, root, &absolute)) {
+	if (!root.data || root.size == 0 || !manny_path_absolute(scratch.arena, root, &absolute)) {
 		end_scratch(scratch);
 		goto failure;
 	}
@@ -376,7 +363,7 @@ static void run_command(Manny_Node_Context *context, Manny_Build *build, const B
 	String dependency_file = manny_path_string(build, task->dependency_file);
 	String execution_directory = manny_path_string(build, task->execution_directory);
 	if (task->tracks_dependencies) {
-		platform_remove_file(dependency_file.data);
+		day_remove_file(dependency_file);
 	}
 
 	manny_platform_run_command(task->execution_command_line, context->arena,
@@ -405,7 +392,7 @@ static void run_command(Manny_Node_Context *context, Manny_Build *build, const B
 				else ++completion->dependencies.count;
 			}
 		}
-		platform_remove_file(dependency_file.data);
+		day_remove_file(dependency_file);
 	}
 	end_scratch(scratch);
 }

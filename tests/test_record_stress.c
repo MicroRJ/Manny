@@ -53,7 +53,7 @@ static b32 test_record_stress(void)
 
 	CHECK_STRESS(manny && source_arena.data && state_arena.data && loaded_arena.data && snapshot_arena.data);
 	CHECK_STRESS(build_record_stream_init(&state_stream, &state_arena, manny) && build_record_stream_init(&loaded_stream, &loaded_arena, manny));
-	CHECK_STRESS(platform_remove_tree(root.data));
+	CHECK_STRESS(!day_remove_tree(root).error);
 	CHECK_STRESS(build_record_stream_compact(&state_stream, path));
 	dependencies.items = arena_push_zero_aligned(&source_arena,
 		DEPENDENCY_COUNT * sizeof(*dependencies.items), _Alignof(String));
@@ -118,7 +118,7 @@ static b32 test_record_stress(void)
 	result = true;
 
 cleanup:
-	platform_remove_tree(root.data);
+	day_remove_tree(root);
 	build_record_stream_destroy(&loaded_stream);
 	build_record_stream_destroy(&state_stream);
 	arena_destroy(&snapshot_arena);
