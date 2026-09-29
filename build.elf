@@ -148,7 +148,6 @@ manny_inputs := common_objects:clone():extend({
 	manny_compiled.object,
 	"elf/build/elf.lib",
 	"elf/build/elf_batteries.lib",
-	"elf/platform/build/platform.lib",
 	"dayan-core/build/dayan.lib",
 })
 common_object_options := " ":join(common_objects)
@@ -156,7 +155,7 @@ common_object_options = f" ${common_object_options}"
 
 build_manny := {
 	name = "link Manny",
-	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib elf\\platform\\build\\platform.lib dayan-core\\build\\dayan.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
+	command_line = f"${cc} /nologo${common_object_options} ${manny_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Febuild\\manny.exe /link /DEBUG /PDB:build\\manny.pdb",
 	inputs = manny_inputs,
 	outputs = { "build/manny.exe" },
 	include_dirs = {},
@@ -195,10 +194,10 @@ for suite := test_suites[...] ? {
 	pdb := f"build/tests/test_${suite.name}.pdb"
 	link := {
 		name = f"link ${suite.name} tests",
-		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib elf\\platform\\build\\platform.lib dayan-core\\build\\dayan.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
+		command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${executable} /link /DEBUG /PDB:${pdb}",
 		inputs = common_objects:clone():extend({
 			test_support.object, compiled.object,
-			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "elf/platform/build/platform.lib", "dayan-core/build/dayan.lib",
+			"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
 		}),
 		outputs = { executable },
 		include_dirs = {},
@@ -248,10 +247,10 @@ stress_compiled := compile_source({
 stress_executable := "build/tests/test_record_stress.exe"
 build_stress_tests := {
 	name = "link record stress tests",
-	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib elf\\platform\\build\\platform.lib dayan-core\\build\\dayan.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
+	command_line = f"${cc} /nologo${common_object_options} ${test_support.object} ${stress_compiled.object} elf\\build\\elf.lib elf\\build\\elf_batteries.lib dayan-core\\build\\dayan.lib /Fe${stress_executable} /link /DEBUG /PDB:build\\tests\\test_record_stress.pdb",
 	inputs = common_objects:clone():extend({
 		test_support.object, stress_compiled.object,
-		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "elf/platform/build/platform.lib", "dayan-core/build/dayan.lib",
+		"elf/build/elf.lib", "elf/build/elf_batteries.lib", "dayan-core/build/dayan.lib",
 	}),
 	outputs = { stress_executable },
 	include_dirs = {},

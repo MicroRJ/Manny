@@ -113,7 +113,7 @@ static b32 copy_string_array_field(elf_State *state, Arena *arena, elf_Index tab
 static b32 set_function(elf_State *state, elf_i32 table, const char *name, elf_Function function)
 {
 	elf_push_fun(state, function);
-	return elf_set_field(state, table, name);
+	return elf_set_field(state, table, name) == ELF_ERROR_NONE;
 }
 
 static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
@@ -428,9 +428,9 @@ static b32 register_manny_library(elf_State *state)
 	if (!set_function(state, manny, "build", l_manny_build)) goto error;
 	if (!set_function(state, manny, "load", l_manny_load)) goto error;
 	elf_push_cstr(state, MANNY_VERSION);
-	if (!elf_set_field(state, manny, "version")) goto error;
+	if (elf_set_field(state, manny, "version") != ELF_ERROR_NONE) goto error;
 
-	if (!elf_set_global(state, "manny")) goto error;
+	if (elf_set_global(state, "manny") != ELF_ERROR_NONE) goto error;
 	return true;
 
 error:
@@ -454,7 +454,8 @@ b32 elf_script_load(Script *script, String path, String source)
 		return false;
 	}
 
-	if (!elf_push_code_source(elf->state, path.data, (elf_StrSlice){ source.data, (elf_u32)source.size })) {
+	if (elf_push_code_source(elf->state, path.data,
+		(elf_StrSlice){ source.data, (elf_u32)source.size }, NULL) != ELF_ERROR_NONE) {
 		script_set_error(script, "unable to load '%s'", path.data);
 		return false;
 	}
