@@ -1,8 +1,119 @@
-#include "build_record_stream.h"
-#include "build_record_internal.h"
+#include "build_record.h"
 #include "platform_adapter.h"
 
 #include <string.h>
+
+static b32 build_record_reserve_tasks(Manny_Build_Recorder *stream, u32 needed)
+{
+	if (stream->task_capacity >= needed) return true;
+	u32 capacity = stream->task_capacity ? stream->task_capacity : 16;
+	while (capacity < needed) {
+		if (capacity > UINT32_MAX / 2) return false;
+		capacity *= 2;
+	}
+	Build_Record_Task *tasks = arena_push_zero_aligned(stream->arena, (u64)capacity * sizeof(*tasks), _Alignof(Build_Record_Task));
+	if (!tasks) return false;
+	if (stream->task_count) memcpy(tasks, stream->tasks, (u64)stream->task_count * sizeof(*stream->tasks));
+	stream->tasks = tasks;
+	stream->task_capacity = capacity;
+	return true;
+}
+
+static u32 build_record_task_index(const Manny_Build_Recorder *stream, Manny_Path output)
+{
+	if (!stream || !manny_path_is_valid(output)) return UINT32_MAX;
+	for (u32 i = 0; i < stream->task_count; ++i) {
+		if (stream->tasks[i].output.atom.id == output.atom.id) return i;
+	}
+	return UINT32_MAX;
+}
+
+static b32 build_record_set(Manny_Build_Recorder *stream, Build_Record_Task task)
+{
+	if (!stream || !stream->arena || !manny_path_is_valid(task.output)) return false;
+	if (task.dependencies.count && !task.dependencies.items) return false;
+	for (u32 i = 0; i < task.dependencies.count; ++i) {
+		if (!manny_path_is_valid(task.dependencies.items[i])) return false;
+	}
+	u32 existing = build_record_task_index(stream, task.output);
+	if (existing == UINT32_MAX && stream->task_count == UINT32_MAX) return false;
+	if (existing == UINT32_MAX && !build_record_reserve_tasks(stream, stream->task_count + 1)) return false;
+	if (task.dependencies.count) {
+		Manny_Path *dependencies = arena_push_copy_aligned(stream->arena,
+		(u64)task.dependencies.count * sizeof(*dependencies), _Alignof(Manny_Path), task.dependencies.items);
+		if (!dependencies) return false;
+		task.dependencies.items = dependencies;
+	}
+	if (existing != UINT32_MAX) stream->tasks[existing] = task;
+	else stream->tasks[stream->task_count++] = task;
+	return true;
+}
+
+static b32 build_record_remove(Manny_Build_Recorder *stream, Manny_Path output)
+{
+	u32 index = build_record_task_index(stream, output);
+	if (index == UINT32_MAX) return false;
+	if (index + 1 < stream->task_count) memmove(stream->tasks + index, stream->tasks + index + 1,
+	(u64)(stream->task_count - index - 1) * sizeof(*stream->tasks));
+	--stream->task_count;
+return true;
+}
+
+static void build_record_replace_tasks(Manny_Build_Recorder *stream, const Manny_Build_Recorder *replacement)
+{
+	stream->tasks = replacement->tasks;
+	stream->task_count = replacement->task_count;
+	stream->task_capacity = replacement->task_capacity;
+}
+
+b32 manny_build_recorder_init(Manny_Build_Recorder *stream, Arena *arena, Manny_Build *build)
+{
+	if (!stream || !arena || !build) return false;
+	*stream = (Manny_Build_Recorder){ .arena = arena, .build = build, .initialized = true };
+	return true;
+}
+
+void manny_build_recorder_destroy(Manny_Build_Recorder *stream)
+{
+	ASSERT(stream);
+	ASSERT(stream->initialized);
+	stream->initialized = false;
+}
+
+void manny_build_recorder_clear(Manny_Build_Recorder *stream)
+{
+	ASSERT(stream);
+	if (!stream->initialized) return;
+	build_record_replace_tasks(stream, &(Manny_Build_Recorder){0});
+	stream->paths = NULL;
+	stream->path_count = 0;
+	stream->path_capacity = 0;
+	stream->ids_by_atom = NULL;
+	stream->atom_capacity = 0;
+}
+
+b32 manny_build_snapshot(const Manny_Build_Recorder *stream, Arena *arena, Manny_Build_Snapshot *snapshot)
+{
+	if (!stream || !stream->initialized || !arena || !snapshot) return false;
+	*snapshot = (Manny_Build_Snapshot){ .task_count = stream->task_count };
+	if (!stream->task_count) return true;
+	snapshot->tasks = arena_push_copy_aligned(arena, (u64)stream->task_count * sizeof(*snapshot->tasks), _Alignof(Build_Record_Task), stream->tasks);
+	return snapshot->tasks != NULL;
+}
+
+b32 manny_build_snapshot_get(const Manny_Build_Snapshot *snapshot, Manny_Path output, Build_Record_Task *result)
+{
+	if (!snapshot || !result || !manny_path_is_valid(output)) return false;
+	for (u32 i = 0; i < snapshot->task_count; ++i) {
+		if (snapshot->tasks[i].output.atom.id != output.atom.id) continue;
+		*result = snapshot->tasks[i];
+		return true;
+	}
+	*result = (Build_Record_Task){0};
+	return false;
+}
+
+
 
 #define BUILD_RECORD_STREAM_VERSION            3
 #define BUILD_RECORD_STREAM_MAGIC              "MNYSTATE"
@@ -20,11 +131,17 @@ Build_Record_Op;
 
 typedef struct
 {
-	u8  *data;
-	u64  size;
-	u64  cursor;
+	Arena *arena;
+	u8    *start;
 }
 Build_Record_Encoder;
+
+typedef struct
+{
+	u8 *header;
+	u8 *content;
+}
+Build_Record_Encoder_Record;
 
 typedef struct Build_Record_Decoder
 {
@@ -39,12 +156,12 @@ typedef u32 Build_Record_Path_Id;
 #define BUILD_RECORD_PATH_ID_NONE            ((Build_Record_Path_Id)0)
 #define BUILD_RECORD_PATH_INITIAL_CAPACITY 16
 
-static b32 build_record_stream_is_valid(const Build_Record_Stream *stream)
+static b32 build_record_stream_is_valid(const Manny_Build_Recorder *stream)
 {
 	return stream && stream->arena && stream->build && stream->initialized;
 }
 
-static void build_record_stream_replace_paths(Build_Record_Stream *stream, const Build_Record_Stream *replacement)
+static void build_record_stream_replace_paths(Manny_Build_Recorder *stream, const Manny_Build_Recorder *replacement)
 {
 	stream->paths           = replacement->paths;
 	stream->path_count      = replacement->path_count;
@@ -53,7 +170,7 @@ static void build_record_stream_replace_paths(Build_Record_Stream *stream, const
 	stream->atom_capacity   = replacement->atom_capacity;
 }
 
-static b32 build_record_stream_reserve_paths(Arena *arena, Build_Record_Stream *stream, u32 needed)
+static b32 build_record_stream_reserve_paths(Arena *arena, Manny_Build_Recorder *stream, u32 needed)
 {
 	if (stream->path_capacity >= needed) return true;
 	u32 capacity = stream->path_capacity ? stream->path_capacity : BUILD_RECORD_PATH_INITIAL_CAPACITY;
@@ -69,7 +186,7 @@ static b32 build_record_stream_reserve_paths(Arena *arena, Build_Record_Stream *
 	return true;
 }
 
-static b32 build_record_stream_reserve_atoms(Arena *arena, Build_Record_Stream *stream, u32 atom_id)
+static b32 build_record_stream_reserve_atoms(Arena *arena, Manny_Build_Recorder *stream, u32 atom_id)
 {
 	if (atom_id < stream->atom_capacity) return true;
 	u32 capacity = stream->atom_capacity ? stream->atom_capacity : BUILD_RECORD_PATH_INITIAL_CAPACITY;
@@ -85,33 +202,33 @@ static b32 build_record_stream_reserve_atoms(Arena *arena, Build_Record_Stream *
 	return true;
 }
 
-static Build_Record_Path_Id build_record_stream_path_id(const Build_Record_Stream *stream, Manny_Path path)
+static Build_Record_Path_Id build_record_stream_path_id(const Manny_Build_Recorder *stream, Manny_Path path)
 {
 	u32 atom = path.atom.id;
 	if (!stream || !manny_path_is_valid(path) || atom >= stream->atom_capacity) return BUILD_RECORD_PATH_ID_NONE;
 	return stream->ids_by_atom[atom];
 }
 
-static Manny_Path build_record_stream_path(const Build_Record_Stream *stream, Build_Record_Path_Id id)
+static Manny_Path build_record_stream_path(const Manny_Build_Recorder *stream, Build_Record_Path_Id id)
 {
 	if (!stream || id == BUILD_RECORD_PATH_ID_NONE || id > stream->path_count) return (Manny_Path){0};
 	return stream->paths[id - 1];
 }
 
-static Build_Record_Path_Id build_record_stream_add_path(Arena *arena, Build_Record_Stream *stream, Manny_Path path)
+static Build_Record_Path_Id register_path(Arena *arena, Manny_Build_Recorder *stream, Manny_Path path)
 {
 	Build_Record_Path_Id existing = build_record_stream_path_id(stream, path);
 	if (existing != BUILD_RECORD_PATH_ID_NONE) return existing;
 	if (!arena || !stream || !manny_path_is_valid(path) || stream->path_count == UINT32_MAX) return BUILD_RECORD_PATH_ID_NONE;
 	if (!build_record_stream_reserve_paths(arena, stream, stream->path_count + 1)) return BUILD_RECORD_PATH_ID_NONE;
 	if (!build_record_stream_reserve_atoms(arena, stream, path.atom.id)) return BUILD_RECORD_PATH_ID_NONE;
-	Build_Record_Path_Id id = ++stream->path_count;
+	Build_Record_Path_Id id = ++ stream->path_count;
 	stream->paths[id - 1] = path;
 	stream->ids_by_atom[path.atom.id] = id;
 	return id;
 }
 
-static b32 build_record_stream_add_replayed_path(Arena *arena, Build_Record_Stream *stream, Manny_Path path)
+static b32 build_record_stream_add_replayed_path(Arena *arena, Manny_Build_Recorder *stream, Manny_Path path)
 {
 	if (!arena || !stream || !manny_path_is_valid(path) || stream->path_count == UINT32_MAX) return false;
 	if (!build_record_stream_reserve_paths(arena, stream, stream->path_count + 1)) return false;
@@ -133,12 +250,8 @@ static b32 build_record_size_add(u64 *total, u64 count, u64 size)
 
 static b32 build_record_encode_bytes(Build_Record_Encoder *encoder, const void *data, u64 size)
 {
-	if (!encoder || (!data && size)) return false;
-	if (encoder->cursor > encoder->size) return false;
-	if (size > encoder->size - encoder->cursor) return false;
-	if (size) memcpy(encoder->data + encoder->cursor, data, (size_t)size);
-	encoder->cursor += size;
-	return true;
+	if (!encoder || !encoder->arena || (!data && size)) return false;
+	return size == 0 || arena_push_copy(encoder->arena, size, data) != NULL;
 }
 
 static b32 build_record_encode_u32(Build_Record_Encoder *encoder, u32 value)
@@ -207,7 +320,21 @@ static u32 build_record_crc32c(const void *data, u64 size)
 	return ~crc;
 }
 
-static b32 build_record_stream_size(const Build_Record_Stream *stream, const Build_Record_Stream *path_index, u64 *stream_size)
+static void build_record_write_u32(u8 *data, u32 value)
+{
+	data[0] = (u8)(value >> 0);
+	data[1] = (u8)(value >> 8);
+	data[2] = (u8)(value >> 16);
+	data[3] = (u8)(value >> 24);
+}
+
+static String build_record_encoder_result(const Build_Record_Encoder *encoder)
+{
+	if (!encoder || !encoder->arena || !encoder->start) return (String){0};
+	return string_from_range(encoder->start, arena_top(encoder->arena));
+}
+
+static b32 build_record_stream_size(const Manny_Build_Recorder *stream, const Manny_Build_Recorder *path_index, u64 *stream_size)
 {
 	u64 size = BUILD_RECORD_STREAM_HEADER_SIZE;
 	if (!stream || !stream->build || !path_index || !stream_size) return false;
@@ -245,82 +372,77 @@ static b32 build_record_stream_size(const Build_Record_Stream *stream, const Bui
 	return true;
 }
 
-static b32 build_record_stream_begin_record(Build_Record_Encoder *stream, u32 content_size, Build_Record_Encoder *content, u64 *checksum_offset)
+static b32 build_record_stream_begin_record(Build_Record_Encoder *encoder, Build_Record_Encoder_Record *record)
 {
-	if (!stream || !content || !checksum_offset) return false;
-	if (!build_record_encode_u32(stream, content_size)) return false;
-	*checksum_offset = stream->cursor;
-	if (!build_record_encode_u32(stream, 0)) return false;
-	if (stream->cursor > stream->size || content_size > stream->size - stream->cursor) return false;
-	*content = (Build_Record_Encoder){ stream->data + stream->cursor, content_size, 0 };
-	stream->cursor += content_size;
+	if (!encoder || !encoder->arena || !record) return false;
+	record->header = arena_push_zero(encoder->arena, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE);
+	if (!record->header) return false;
+	record->content = arena_top(encoder->arena);
 	return true;
 }
 
-static b32 build_record_stream_finish_record(Build_Record_Encoder *stream, const Build_Record_Encoder *content, u64 checksum_offset)
+static b32 build_record_stream_finish_record(Build_Record_Encoder *encoder, const Build_Record_Encoder_Record *record)
 {
-	Build_Record_Encoder checksum;
-	if (!stream || !content || content->cursor != content->size) return false;
-	if (checksum_offset > stream->size || sizeof(u32) > stream->size - checksum_offset) return false;
-	checksum = (Build_Record_Encoder){ stream->data + checksum_offset, sizeof(u32), 0 };
-	return build_record_encode_u32(&checksum, build_record_crc32c(content->data, content->size));
+	if (!encoder || !encoder->arena || !record || !record->header || !record->content) return false;
+	u8 *end = arena_top(encoder->arena);
+	if (end < record->content) return false;
+	u64 content_size = (u64)(end - record->content);
+	if (content_size > UINT32_MAX) return false;
+	build_record_write_u32(record->header, (u32)content_size);
+	build_record_write_u32(record->header + sizeof(u32), build_record_crc32c(record->content, content_size));
+	return true;
 }
 
 static b32 build_record_stream_encode_intern(Build_Record_Encoder *encoder, String path)
 {
-	u64 checksum_offset;
-	Build_Record_Encoder content;
+	Build_Record_Encoder_Record record;
 	if (!encoder || !path.data || path.size == 0 || path.size > UINT32_MAX - 8) return false;
-	if (!build_record_stream_begin_record(encoder, 8 + (u32)path.size, &content, &checksum_offset)) return false;
-	if (!build_record_encode_u32(&content, BUILD_RECORD_OP_INTERN)) return false;
-	if (!build_record_encode_u32(&content, (u32)path.size)) return false;
-	if (!build_record_encode_bytes(&content, path.data, path.size)) return false;
-	return build_record_stream_finish_record(encoder, &content, checksum_offset);
+	if (!build_record_stream_begin_record(encoder, &record)) return false;
+	if (!build_record_encode_u32(encoder, BUILD_RECORD_OP_INTERN)) return false;
+	if (!build_record_encode_u32(encoder, (u32)path.size)) return false;
+	if (!build_record_encode_bytes(encoder, path.data, path.size)) return false;
+	return build_record_stream_finish_record(encoder, &record);
 }
 
-static b32 build_record_stream_encode_set(Build_Record_Encoder *encoder, const Build_Record_Stream *state_stream, const Build_Record_Task *task)
+static b32 build_record_stream_encode_set(Build_Record_Encoder *encoder, const Manny_Build_Recorder *state_stream, const Build_Record_Task *task)
 {
 	u64 content_size = 20 + MANNY_FINGERPRINT_SIZE;
-	u64 checksum_offset;
-	Build_Record_Encoder content;
+	Build_Record_Encoder_Record record;
 	if (!encoder || !state_stream || !task || (task->dependencies.count && !task->dependencies.items)) return false;
 	if (!build_record_size_add(&content_size, task->dependencies.count, 4) || content_size > UINT32_MAX) return false;
-	if (!build_record_stream_begin_record(encoder, (u32)content_size, &content, &checksum_offset)) return false;
-	if (!build_record_encode_u32(&content, BUILD_RECORD_OP_SET)) return false;
-	if (!build_record_encode_u32(&content, build_record_stream_path_id(state_stream, task->output))) return false;
-	if (!build_record_encode_u64(&content, task->output_stamp)) return false;
-	if (!build_record_encode_bytes(&content, task->fingerprint.bytes, sizeof(task->fingerprint.bytes))) return false;
-	if (!build_record_encode_u32(&content, task->dependencies.count)) return false;
+	if (!build_record_stream_begin_record(encoder, &record)) return false;
+	if (!build_record_encode_u32(encoder, BUILD_RECORD_OP_SET)) return false;
+	if (!build_record_encode_u32(encoder, build_record_stream_path_id(state_stream, task->output))) return false;
+	if (!build_record_encode_u64(encoder, task->output_stamp)) return false;
+	if (!build_record_encode_bytes(encoder, task->fingerprint.bytes, sizeof(task->fingerprint.bytes))) return false;
+	if (!build_record_encode_u32(encoder, task->dependencies.count)) return false;
 	for (u32 dependency = 0; dependency < task->dependencies.count; ++dependency) {
-		if (!build_record_encode_u32(&content, build_record_stream_path_id(state_stream, task->dependencies.items[dependency]))) return false;
+		if (!build_record_encode_u32(encoder, build_record_stream_path_id(state_stream, task->dependencies.items[dependency]))) return false;
 	}
-	return build_record_stream_finish_record(encoder, &content, checksum_offset);
+	return build_record_stream_finish_record(encoder, &record);
 }
 
 static b32 build_record_stream_encode_remove(Build_Record_Encoder *encoder, Build_Record_Path_Id output)
 {
-	u64 checksum_offset;
-	Build_Record_Encoder content;
+	Build_Record_Encoder_Record record;
 	if (!encoder || output == BUILD_RECORD_PATH_ID_NONE) return false;
-	if (!build_record_stream_begin_record(encoder, 8, &content, &checksum_offset)) return false;
-	if (!build_record_encode_u32(&content, BUILD_RECORD_OP_REMOVE)) return false;
-	if (!build_record_encode_u32(&content, output)) return false;
-	return build_record_stream_finish_record(encoder, &content, checksum_offset);
+	if (!build_record_stream_begin_record(encoder, &record)) return false;
+	if (!build_record_encode_u32(encoder, BUILD_RECORD_OP_REMOVE)) return false;
+	if (!build_record_encode_u32(encoder, output)) return false;
+	return build_record_stream_finish_record(encoder, &record);
 }
 
-static b32 build_record_stream_encode_with_paths(Arena *arena, const Build_Record_Stream *stream,
-	const Build_Record_Stream *path_index, String *encoded)
+static b32 build_record_stream_encode_with_paths(Arena *arena, const Manny_Build_Recorder *stream,
+const Manny_Build_Recorder *path_index, String *encoded)
 {
 	u64 mark;
 	u64 stream_size;
-	Build_Record_Encoder encoder = {0};
+	Build_Record_Encoder encoder;
 	if (!arena || !stream || !path_index || !encoded) return false;
 	*encoded = (String){0};
 	if (!build_record_stream_size(stream, path_index, &stream_size) || stream_size > SIZE_MAX) return false;
 	mark = arena_mark(arena);
-	encoder.data = arena_push(arena, stream_size);
-	encoder.size = stream_size;
-	if (!encoder.data) return false;
+	encoder = (Build_Record_Encoder){ .arena = arena, .start = arena_top(arena) };
 
 	if (!build_record_encode_bytes(&encoder, BUILD_RECORD_STREAM_MAGIC, BUILD_RECORD_STREAM_MAGIC_SIZE)) goto failure;
 	if (!build_record_encode_u32(&encoder, BUILD_RECORD_STREAM_VERSION)) goto failure;
@@ -334,8 +456,8 @@ static b32 build_record_stream_encode_with_paths(Arena *arena, const Build_Recor
 		if (!build_record_stream_encode_set(&encoder, path_index, stream->tasks + i)) goto failure;
 	}
 
-	if (encoder.cursor != encoder.size) goto failure;
-	*encoded = string_from_data(encoder.data, encoder.size);
+	*encoded = build_record_encoder_result(&encoder);
+	if (encoded->size != stream_size) goto failure;
 	return true;
 
 	failure:
@@ -343,10 +465,10 @@ static b32 build_record_stream_encode_with_paths(Arena *arena, const Build_Recor
 	return false;
 }
 
-static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Stream *stream, String encoded)
+static Build_Record_Result build_record_stream_replay_encoded(Manny_Build_Recorder *stream, String encoded)
 {
 	u64 mark;
-	Build_Record_Stream decoded = {
+	Manny_Build_Recorder decoded = {
 		.arena = stream ? stream->arena : NULL,
 		.build = stream ? stream->build : NULL,
 		.initialized = true,
@@ -358,8 +480,8 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 	u32 version;
 	u32 header_size;
 	if (!build_record_stream_is_valid(stream)) return BUILD_RECORD_ERROR;
-	build_record_replace_tasks(stream, &(Build_Record_Stream){0});
-	build_record_stream_replace_paths(stream, &(Build_Record_Stream){0});
+	build_record_replace_tasks(stream, &(Manny_Build_Recorder){0});
+	build_record_stream_replace_paths(stream, &(Manny_Build_Recorder){0});
 	if (!encoded.data || encoded.size < BUILD_RECORD_STREAM_HEADER_SIZE) return BUILD_RECORD_INVALID;
 	mark = arena_mark(arena);
 
@@ -474,33 +596,44 @@ static Build_Record_Result build_record_stream_replay_encoded(Build_Record_Strea
 
 	invalid:
 	arena_restore(arena, mark);
-	build_record_replace_tasks(stream, &(Build_Record_Stream){0});
-	build_record_stream_replace_paths(stream, &(Build_Record_Stream){0});
+	build_record_replace_tasks(stream, &(Manny_Build_Recorder){0});
+	build_record_stream_replace_paths(stream, &(Manny_Build_Recorder){0});
 	return BUILD_RECORD_INVALID;
 
 	error:
 	arena_restore(arena, mark);
-	build_record_replace_tasks(stream, &(Build_Record_Stream){0});
-	build_record_stream_replace_paths(stream, &(Build_Record_Stream){0});
+	build_record_replace_tasks(stream, &(Manny_Build_Recorder){0});
+	build_record_stream_replace_paths(stream, &(Manny_Build_Recorder){0});
 	return BUILD_RECORD_ERROR;
 }
 
-static b32 build_record_stream_append_bytes(String path, const void *data, u64 size)
+// TODO(RJ): consider just keeping the file open
+static b32 append_bytes(String path, const void *data, u64 size)
 {
+	if (!data && size) return false;
+
+	b32 result = false;
+
 	day_File file;
-	u64 position;
-	u64 written = 0;
-	b32 result;
-	if (!string_is_terminated(path) || (!data && size)) return false;
-	if (day_access_file(path, DAY_FILE_OPEN_EXISTING, DAY_FILE_WRITE | DAY_FILE_SHARE_READ, &file).error) return false;
-	result = !day_set_file_cursor(file, DAY_SEEK_END, 0, &position).error &&
-		!day_write_file(file, data, size, &written).error && written == size;
-	if (day_close_file(file).error) result = false;
+	if (!day_access_file(path, DAY_FILE_OPEN_EXISTING, DAY_FILE_WRITE | DAY_FILE_SHARE_READ, &file).error)
+	{
+		u64 position;
+		if (!day_set_file_cursor(file, DAY_SEEK_END, 0, &position).error) {
+
+			u64 written = 0;
+			if (!day_write_file(file, data, size, &written).error) {
+				result = written == size;
+			}
+		}
+
+		// TODO(RJ): we could succeed and yet not be able to close to file?!
+		if (day_close_file(file).error) result = false;
+	}
+
 	return result;
 }
 
-static void build_record_stream_rollback_paths(Build_Record_Stream *stream,
-	const Build_Record_Stream *previous, u32 first_new_path, u64 arena_mark)
+static void build_record_stream_rollback_paths(Manny_Build_Recorder *stream, const Manny_Build_Recorder *previous, u32 first_new_path, u64 arena_mark)
 {
 	for (u32 i = first_new_path; i < stream->path_count; ++i) {
 		u32 atom = stream->paths[i].atom.id;
@@ -510,59 +643,63 @@ static void build_record_stream_rollback_paths(Build_Record_Stream *stream,
 	arena_restore(stream->arena, arena_mark);
 }
 
-b32 build_record_stream_append_set(Build_Record_Stream *stream, String path, Build_Record_Task task)
+b32 manny_build_recorder_append_set(Manny_Build_Recorder *stream, String path, Build_Record_Task task)
 {
-	Build_Record_Stream previous;
-	u32 first_new_path;
-	u64 mark;
-	u64 append_size = 0;
-	Scratch scratch = {0};
-	Build_Record_Encoder encoder = {0};
-	if (!build_record_stream_is_valid(stream) || !string_is_terminated(path) || path.size == 0) return false;
+	if (!build_record_stream_is_valid(stream) || path.size == 0) return false;
 	if (!manny_path_is_valid(task.output) || (task.dependencies.count && !task.dependencies.items)) return false;
-	previous = *stream;
-	first_new_path = stream->path_count;
-	mark = arena_mark(stream->arena);
-	if (build_record_stream_add_path(stream->arena, stream, task.output) == BUILD_RECORD_PATH_ID_NONE) goto rollback;
-	for (u32 i = 0; i < task.dependencies.count; ++i) {
-		if (build_record_stream_add_path(stream->arena, stream, task.dependencies.items[i]) == BUILD_RECORD_PATH_ID_NONE) goto rollback;
+
+	// TODO(RJ): remove this rollback logic, this should just be done automatically
+	Manny_Build_Recorder previous = *stream;
+
+	u32 first_new_path = stream->path_count;
+	u64 mark = arena_mark(stream->arena);
+
+	if (register_path(stream->arena, stream, task.output) == BUILD_RECORD_PATH_ID_NONE) goto rollback;
+
+	for (u32 i = 0; i < task.dependencies.count; ++ i) {
+		if (register_path(stream->arena, stream, task.dependencies.items[i]) == BUILD_RECORD_PATH_ID_NONE) goto rollback;
 	}
+
+	Scratch scratch = begin_different_scratch(stream->arena);
+	Build_Record_Encoder encoder = { .arena = scratch.arena, .start = arena_top(scratch.arena) };
+
 	for (u32 i = first_new_path; i < stream->path_count; ++i) {
 		String new_path = manny_path_string(stream->build, stream->paths[i]);
-		if (!build_record_size_add(&append_size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 8)) goto rollback;
-		if (!build_record_size_add(&append_size, 1, new_path.size)) goto rollback;
+		if (!build_record_stream_encode_intern(&encoder, new_path)) goto failure;
 	}
-	if (!build_record_size_add(&append_size, 1, BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 20 + MANNY_FINGERPRINT_SIZE)) goto rollback;
-	if (!build_record_size_add(&append_size, task.dependencies.count, 4) || append_size > SIZE_MAX) goto rollback;
 
-	scratch = begin_different_scratch(stream->arena);
-	encoder.data = arena_push(scratch.arena, append_size);
-	encoder.size = append_size;
-	if (!encoder.data) goto failure;
-	for (u32 i = first_new_path; i < stream->path_count; ++i) {
-		if (!build_record_stream_encode_intern(&encoder, manny_path_string(stream->build, stream->paths[i]))) goto failure;
-	}
 	if (!build_record_stream_encode_set(&encoder, stream, &task)) goto failure;
-	if (encoder.cursor != encoder.size || !build_record_stream_append_bytes(path, encoder.data, encoder.size)) goto failure;
+	String encoded = build_record_encoder_result(&encoder);
+
+	if (!append_bytes(path, encoded.data, encoded.size)) goto failure;
+
 	end_scratch(scratch);
 	return build_record_set(stream, task);
 
 	failure:
 	end_scratch(scratch);
+
+	// TODO(RJ): remove this rollback logic, this should just be done automatically
 	rollback:
 	build_record_stream_rollback_paths(stream, &previous, first_new_path, mark);
 	return false;
 }
 
-b32 build_record_stream_append_remove(Build_Record_Stream *stream, String path, Manny_Path output)
+b32 manny_build_recorder_append_remove(Manny_Build_Recorder *stream, String path, Manny_Path output)
 {
-	u8 bytes[BUILD_RECORD_STREAM_RECORD_HEADER_SIZE + 8];
-	Build_Record_Encoder encoder = { bytes, sizeof(bytes), 0 };
 	if (!build_record_stream_is_valid(stream) || !string_is_terminated(path) || path.size == 0) return false;
 	if (build_record_task_index(stream, output) == UINT32_MAX) return true;
 	Build_Record_Path_Id output_id = build_record_stream_path_id(stream, output);
-	if (!build_record_stream_encode_remove(&encoder, output_id) || encoder.cursor != encoder.size) return false;
-	if (!build_record_stream_append_bytes(path, encoder.data, encoder.size)) return false;
+	Scratch scratch = begin_different_scratch(stream->arena);
+	Build_Record_Encoder encoder = { .arena = scratch.arena, .start = arena_top(scratch.arena) };
+	if (!build_record_stream_encode_remove(&encoder, output_id)) {
+		end_scratch(scratch);
+		return false;
+	}
+	String encoded = build_record_encoder_result(&encoder);
+	b32 appended = append_bytes(path, encoded.data, encoded.size);
+	end_scratch(scratch);
+	if (!appended) return false;
 	return build_record_remove(stream, output);
 }
 
@@ -577,26 +714,26 @@ static String build_record_parent_directory(String path)
 	return (String){0};
 }
 
-static b32 build_record_stream_collect_paths(Arena *arena, const Build_Record_Stream *stream, Build_Record_Stream *path_index)
+static b32 build_record_stream_collect_paths(Arena *arena, const Manny_Build_Recorder *stream, Manny_Build_Recorder *path_index)
 {
 	if (!arena || !stream || !path_index) return false;
 	for (u32 i = 0; i < stream->task_count; ++i) {
 		const Build_Record_Task *task = stream->tasks + i;
-		if (build_record_stream_add_path(arena, path_index, task->output) == BUILD_RECORD_PATH_ID_NONE) return false;
+		if (register_path(arena, path_index, task->output) == BUILD_RECORD_PATH_ID_NONE) return false;
 		for (u32 dependency = 0; dependency < task->dependencies.count; ++dependency) {
-			if (build_record_stream_add_path(arena, path_index, task->dependencies.items[dependency]) == BUILD_RECORD_PATH_ID_NONE) return false;
+			if (register_path(arena, path_index, task->dependencies.items[dependency]) == BUILD_RECORD_PATH_ID_NONE) return false;
 		}
 	}
 	return true;
 }
 
-b32 build_record_stream_compact(Build_Record_Stream *stream, String path)
+b32 manny_build_recorder_compact(Manny_Build_Recorder *stream, String path)
 {
 	u64 mark;
 	u64 stream_size;
 	u64 arena_capacity = 64;
 	Arena arena = {0};
-	Build_Record_Stream compacted = {
+	Manny_Build_Recorder compacted = {
 		.arena = stream ? stream->arena : NULL,
 		.build = stream ? stream->build : NULL,
 	};
@@ -638,11 +775,11 @@ b32 build_record_stream_compact(Build_Record_Stream *stream, String path)
 	return result;
 }
 
-Build_Record_Result build_record_stream_load(Build_Record_Stream *stream, String path)
+Build_Record_Result manny_build_recorder_load(Manny_Build_Recorder *stream, String path)
 {
 	if (!build_record_stream_is_valid(stream) || !string_is_terminated(path) || path.size == 0) return BUILD_RECORD_ERROR;
-	build_record_replace_tasks(stream, &(Build_Record_Stream){0});
-	build_record_stream_replace_paths(stream, &(Build_Record_Stream){0});
+	build_record_replace_tasks(stream, &(Manny_Build_Recorder){0});
+	build_record_stream_replace_paths(stream, &(Manny_Build_Recorder){0});
 
 	Manny_Platform_File_Info info;
 	if (!manny_platform_file_info(path, &info)) return BUILD_RECORD_MISSING;
@@ -663,3 +800,5 @@ Build_Record_Result build_record_stream_load(Build_Record_Stream *stream, String
 	end_scratch(scratch);
 	return result;
 }
+
+

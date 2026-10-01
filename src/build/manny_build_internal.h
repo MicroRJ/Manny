@@ -23,3 +23,4 @@ b32 manny_path_is_valid(Manny_Path path);
 Manny_Path manny_build_root(const Manny_Build *build);
 
 #endif
+

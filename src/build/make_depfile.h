@@ -6,3 +6,4 @@
 b32 make_depfile_parse(Arena *arena, String contents, String_Array *dependencies);
 
 #endif
+

@@ -104,7 +104,40 @@ h1 {
 .summary {
 	margin-top: 32px;
 	color: var(--muted);
-	font-size: clamp(20px, 2.4vw, 26px);
+	font-size: clamp(24px, 3vw, 34px);
+	font-weight: 500;
+	letter-spacing: -0.02em;
+}
+
+.claims {
+	display: grid;
+	gap: 12px;
+	margin-top: 34px;
+	font: 500 clamp(13px, 1.5vw, 15px)/1.5 var(--mono);
+}
+
+.claims ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.replaced {
+	color: var(--muted);
+}
+
+.replaced li {
+	text-decoration: line-through;
+	text-decoration-thickness: 1px;
+}
+
+.qualities li::before {
+	margin-right: 8px;
+	color: #55764b;
+	content: "\2713";
 }
 
 .actions {
@@ -130,6 +163,30 @@ h1 {
 	gap: 72px;
 	align-items: start;
 	padding-bottom: clamp(110px, 15vw, 170px);
+}
+
+.higher-level {
+	margin: 64px 0 42px;
+	color: var(--muted);
+	font-size: clamp(18px, 2.1vw, 21px);
+	line-height: 1.6;
+}
+
+.higher-level p + p {
+	margin-top: 18px;
+}
+
+.higher-level code {
+	padding: 0.1em 0.3em;
+	border-radius: 4px;
+	background: var(--paper-deep);
+	font: 500 0.85em var(--mono);
+}
+
+.script-note {
+	margin-top: 24px;
+	color: var(--orange-dark);
+	font: 500 15px/1.6 var(--mono);
 }
 
 .section-heading {

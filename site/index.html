@@ -26,7 +26,22 @@
 	<main>
 		<section class="intro">
 			<h1>Manny</h1>
-			<p class="summary">A small hackable build system for C and C++.</p>
+			<p class="summary">One for all.</p>
+			<div class="claims">
+				<ul class="replaced" aria-label="Build systems not required">
+					<li>CMake</li>
+					<li>Meson</li>
+					<li>Ninja</li>
+					<li>Make</li>
+				</ul>
+				<ul class="qualities" aria-label="Manny qualities">
+					<li>One executable</li>
+					<li>Programmable</li>
+					<li>Adaptable</li>
+					<li>Simple</li>
+					<li>Fast</li>
+				</ul>
+			</div>
 			<div class="actions">
 				<a class="download" href="https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev">Download 0.3.0-dev <span aria-hidden="true">&#8595;</span></a>
 				<a href="https://github.com/MicroRJ/Manny#readme">Read the README <span aria-hidden="true">&#8594;</span></a>
@@ -36,29 +51,87 @@
 		<div class="content-layout">
 			<section class="example">
 				<div class="section-heading">
-					<p>build.elf</p>
+					<p>build.elf / raw tasks</p>
 				</div>
 
 				<div class="code-block">
-					<pre><code><span class="variable">c</span> ::= <span class="variable">manny</span>.<span class="call">load</span>(<span class="string">"c"</span>)
+					<pre><code><span class="variable">elf</span>.<span class="property">fs</span>.<span class="call">create_directories</span>(<span class="string">"build"</span>)
 
-<span class="variable">hello</span> ::= c.<span class="call">executable</span>({
-	<span class="property">name</span> = <span class="string">"hello"</span>,
-	<span class="property">sources</span> = {
-		<span class="string">"main.c"</span>,
-		<span class="string">"message.c"</span>,
-	},
-})
+<span class="variable">compile</span> := {
+	<span class="property">name</span> = <span class="string">"compile main"</span>,
+	<span class="property">command_line</span> = <span class="string">"clang-cl /c main.c /Fobuild/main.obj"</span>,
+	<span class="property">inputs</span> = { <span class="string">"main.c"</span> },
+	<span class="property">outputs</span> = { <span class="string">"build/main.obj"</span> },
+}
+
+<span class="variable">link</span> := {
+	<span class="property">name</span> = <span class="string">"link hello"</span>,
+	<span class="property">command_line</span> = <span class="string">"clang-cl build/main.obj /Febuild/hello.exe"</span>,
+	<span class="property">inputs</span> = { <span class="string">"build/main.obj"</span> },
+	<span class="property">outputs</span> = { <span class="string">"build/hello.exe"</span> },
+	<span class="property">dependencies</span> = { <span class="variable">compile</span> },
+}
 
 <span class="variable">entries</span> := {}
 <span class="variable">entries</span>.<span class="property">build</span> = <span class="keyword">fun</span>() {
 	<span class="keyword">ret</span> <span class="variable">manny</span>.<span class="call">build</span>({
-		<span class="property">targets</span> = { <span class="variable">hello</span>.<span class="property">task</span> },
+		<span class="property">targets</span> = { <span class="variable">link</span> },
 	})
 }
 
 <span class="keyword">ret</span> <span class="variable">entries</span></code></pre>
 				</div>
+
+				<div class="higher-level">
+					<p>That is Manny's entire interface: tasks and dependencies.</p>
+					<p>But <code>build.elf</code> is a program. You can describe your project as data and turn that data into tasks:</p>
+				</div>
+
+				<div class="section-heading">
+					<p>build.elf / generated tasks</p>
+				</div>
+
+				<div class="code-block">
+					<pre><code><span class="variable">sources</span> := { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> }
+
+<span class="variable">compile_tasks</span> := <span class="variable">sources</span>:<span class="call">map</span>(<span class="keyword">fun</span>(<span class="variable">source</span>) {
+	<span class="variable">object</span> := <span class="string">f"build/${source:slice(0, -2)}.obj"</span>
+	<span class="keyword">ret</span> {
+		<span class="property">name</span> = <span class="string">f"compile ${source}"</span>,
+		<span class="property">command_line</span> = <span class="string">f"clang-cl /c ${source} /Fo${object}"</span>,
+		<span class="property">inputs</span> = { <span class="variable">source</span> },
+		<span class="property">outputs</span> = { <span class="variable">object</span> },
+	}
+})</code></pre>
+				</div>
+
+				<div class="higher-level">
+					<p>For C and C++, Manny also ships with a Meson-like project descriptor. It handles targets, propagation, generated files, compilation, linking, running, and testing:</p>
+				</div>
+
+				<div class="section-heading">
+					<p>build.elf / C project</p>
+				</div>
+
+				<div class="code-block">
+					<pre><code><span class="variable">c</span> ::= <span class="variable">manny</span>.<span class="call">load</span>(<span class="string">"c"</span>)
+
+<span class="variable">hello</span> := {
+	<span class="property">kind</span> = <span class="string">"executable"</span>,
+	<span class="property">name</span> = <span class="string">"hello"</span>,
+	<span class="property">sources</span> = { <span class="string">"main.c"</span>, <span class="string">"message.c"</span> },
+}
+
+<span class="variable">project</span> := {
+	<span class="property">name</span> = <span class="string">"hello"</span>,
+	<span class="property">default_target</span> = <span class="variable">hello</span>,
+	<span class="property">targets</span> = { <span class="property">hello</span> = <span class="variable">hello</span> },
+}
+
+<span class="variable">tasks</span> := <span class="variable">c</span>.<span class="call">project_to_tasks</span>(<span class="variable">project</span>)</code></pre>
+				</div>
+
+				<p class="script-note">This layer is written in elf too. Change it, replace it, or skip it.</p>
 
 				<div class="terminal">
 					<p>manny</p>

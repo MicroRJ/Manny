@@ -8,3 +8,4 @@ b32 vcvars_cache_load(void);
 b32 vcvars_cache_apply(String cache);
 
 #endif
+

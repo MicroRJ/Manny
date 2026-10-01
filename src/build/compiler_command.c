@@ -159,3 +159,4 @@ b32 compiler_command_add_dependencies(Arena *arena, const Compiler_Command *comm
 	arena_finalize_string(arena, *result);
 	return true;
 }
+

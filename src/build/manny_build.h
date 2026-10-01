@@ -53,3 +53,4 @@ const char *manny_task_name(const Manny_Node *node);
 Manny_Node_Status manny_task_state(const Manny_Build *build, const Manny_Node *node);
 
 #endif
+

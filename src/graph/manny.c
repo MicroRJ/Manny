@@ -208,3 +208,4 @@ const char *manny_error_string(Manny_Error result)
 	}
 	return "unknown Manny result";
 }
+

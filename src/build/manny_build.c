@@ -1,5 +1,5 @@
 #include "manny_build_internal.h"
-#include "build_record_stream.h"
+#include "build_record.h"
 #include "compiler_command.h"
 #include "logger.h"
 #include "make_depfile.h"
@@ -89,8 +89,8 @@ typedef struct Manny_Builder
 	Manny                *manny;
 	Manny_Path            state_path;
 
-	Build_Record_Stream   record_stream;
-	Build_Record_Snapshot record_snapshot;
+	Manny_Build_Recorder   record_stream;
+	Manny_Build_Snapshot record_snapshot;
 
 	Arena               state_arena;
 	void               *event_user_data;
@@ -320,7 +320,7 @@ static Manny_Rebuild_Decision task_rebuild_decision(Manny_Builder *builder, cons
 		Manny_Path output_path = outputs->items[0];
 		String output = manny_path_string(builder->build, output_path);
 		Build_Record_Task state_task;
-		if (!build_record_snapshot_get(&builder->record_snapshot, output_path, &state_task)) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
+		if (!manny_build_snapshot_get(&builder->record_snapshot, output_path, &state_task)) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_STATE_MISSING, .path = output, .rebuild = true };
 		if (state_task.output_stamp != primary_output_stamp) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_STATE_CHANGED, .path = output, .rebuild = true };
 		if (memcmp(state_task.fingerprint.bytes, task->fingerprint.bytes, MANNY_FINGERPRINT_SIZE) != 0) return (Manny_Rebuild_Decision){ .reason = MANNY_REBUILD_FINGERPRINT_CHANGED, .path = output, .rebuild = true };
 		for (u32 i = 0; i < state_task.dependencies.count; ++i) {
@@ -534,7 +534,7 @@ static void record_task_completion_state(Manny_Builder *builder, const Manny_Bui
 	String state_path = manny_path_string(builder->build, builder->state_path);
 
 	if (!succeeded || (completion->task->tracks_dependencies && !completion->dependency_state_valid)) {
-		if (!build_record_stream_append_remove(&builder->record_stream, state_path, output_path)) builder->internal_error = true;
+		if (!manny_build_recorder_append_remove(&builder->record_stream, state_path, output_path)) builder->internal_error = true;
 		else builder->state_changed = true;
 
 		if (succeeded && completion->task->tracks_dependencies && !completion->dependency_state_valid) {
@@ -551,7 +551,7 @@ static void record_task_completion_state(Manny_Builder *builder, const Manny_Bui
 		.fingerprint = completion->task->fingerprint,
 		.dependencies = completion->dependencies,
 	};
-	if (!build_record_stream_append_set(&builder->record_stream, state_path, record)) builder->internal_error = true;
+	if (!manny_build_recorder_append_set(&builder->record_stream, state_path, record)) builder->internal_error = true;
 	else builder->state_changed = true;
 }
 
@@ -625,14 +625,14 @@ b32 manny_build(Manny_Build *build, Manny_Build_Params options)
 		result = false;
 		goto cleanup;
 	}
-	if (!build_record_stream_init(&builder.record_stream, &builder.state_arena, build)) {
+	if (!manny_build_recorder_init(&builder.record_stream, &builder.state_arena, build)) {
 		result = false;
 		goto cleanup;
 	}
 
 	if (builder.state_tracking) {
 		String state_path = manny_path_string(build, builder.state_path);
-		Build_Record_Result load_result = build_record_stream_load(&builder.record_stream, state_path);
+		Build_Record_Result load_result = manny_build_recorder_load(&builder.record_stream, state_path);
 		if (load_result == BUILD_RECORD_ERROR) {
 			log_warning("could not load Manny build state");
 			result = false;
@@ -640,10 +640,10 @@ b32 manny_build(Manny_Build *build, Manny_Build_Params options)
 		}
 		else if (load_result == BUILD_RECORD_INVALID) {
 			log_warning("ignoring invalid Manny build state");
-			build_record_stream_clear(&builder.record_stream);
+			manny_build_recorder_clear(&builder.record_stream);
 		}
 		if (load_result != BUILD_RECORD_OK) {
-			if (!build_record_stream_compact(&builder.record_stream, state_path)) {
+			if (!manny_build_recorder_compact(&builder.record_stream, state_path)) {
 				log_warning("could not prepare Manny build state");
 				result = false;
 				goto cleanup;
@@ -651,7 +651,7 @@ b32 manny_build(Manny_Build *build, Manny_Build_Params options)
 		}
 	}
 
-	if (!build_record_stream_snapshot(&builder.record_stream, &builder.state_arena, &builder.record_snapshot)) {
+	if (!manny_build_snapshot(&builder.record_stream, &builder.state_arena, &builder.record_snapshot)) {
 		result = false;
 		goto cleanup;
 	}
@@ -671,14 +671,14 @@ b32 manny_build(Manny_Build *build, Manny_Build_Params options)
 	});
 	if (builder.internal_error) result = false;
 	if (result && builder.state_tracking && builder.state_changed) {
-		if (!build_record_stream_compact(&builder.record_stream, manny_path_string(build, builder.state_path))) {
+		if (!manny_build_recorder_compact(&builder.record_stream, manny_path_string(build, builder.state_path))) {
 			log_warning("could not compact Manny build state");
 			result = false;
 		}
 	}
 
 cleanup:
-	if (builder.record_stream.initialized) build_record_stream_destroy(&builder.record_stream);
+	if (builder.record_stream.initialized) manny_build_recorder_destroy(&builder.record_stream);
 	arena_destroy(&builder.state_arena);
 	return result;
 }
@@ -869,3 +869,4 @@ Manny_Node_Status manny_task_state(const Manny_Build *build, const Manny_Node *n
 {
 	return build && build->execution ? manny_execution_node_state(build->execution, node) : MANNY_NODE_PENDING;
 }
+

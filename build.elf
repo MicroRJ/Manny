@@ -1,5 +1,5 @@
 load_project_tasks ::= fun() {
-	c_module := elf.load_file("c.elf")
+	c_module := elf.load_file("modules/c.elf")
 	project := elf.load_file("project.elf")
 	ret c_module.project_to_tasks(project, {
 		compiler = "clang-cl",
@@ -10,8 +10,8 @@ load_project_tasks ::= fun() {
 
 stage_c_module := {
 	name = "stage C target module",
-	command_line = "cmd /d /c copy /Y c.elf build\\c.elf >nul",
-	inputs = { "c.elf" },
+	command_line = "cmd /d /c copy /Y modules\\c.elf build\\c.elf >nul",
+	inputs = { "modules/c.elf" },
 	outputs = { "build/c.elf" },
 	include_dirs = {},
 	dependencies = {},
@@ -37,7 +37,7 @@ make_test_target ::= fun(tasks) {
 		name = "run C helper example",
 		command_line = "build\\manny.exe build.elf run",
 		working_directory = "example",
-		inputs = { "../build/manny.exe", "../c.elf", "build.elf", "main.c", "message.c", "message.h" },
+		inputs = { "../build/manny.exe", "../modules/c.elf", "build.elf", "main.c", "message.c", "message.h" },
 		outputs = {},
 		include_dirs = {},
 		dependencies = { tasks.default_task, stage_c_module, previous_test },
@@ -48,7 +48,7 @@ make_test_target ::= fun(tasks) {
 		command_line = "build\\manny.exe build.elf test",
 		working_directory = "tests/fixtures/c_helper",
 		inputs = {
-			"../../../build/manny.exe", "../../../c.elf", "build.elf", "codegen.c",
+			"../../../build/manny.exe", "../../../modules/c.elf", "build.elf", "codegen.c",
 			"fixture.c", "fixture_test.c", "main.c", "include/fixture.h",
 		},
 		outputs = {},

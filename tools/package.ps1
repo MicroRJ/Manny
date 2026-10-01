@@ -12,7 +12,7 @@ $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $mannyExecutable = Join-Path $repositoryRoot "blessed\manny.exe"
 $licenseFile = Join-Path $repositoryRoot "LICENSE"
 $exampleRoot = Join-Path $repositoryRoot "example"
-$cModule = Join-Path $repositoryRoot "c.elf"
+$cModule = Join-Path $repositoryRoot "modules\c.elf"
 $quickStart = Join-Path $PSScriptRoot "QUICKSTART.txt"
 $distributionRoot = Join-Path $repositoryRoot "dist"
 

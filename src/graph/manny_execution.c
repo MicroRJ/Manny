@@ -4,7 +4,7 @@
 
 typedef struct Manny_Execution_Node
 {
-	u32             unfinished_dependencies;
+	u32               unfinished_dependencies;
 	Manny_Node_Result result;
 	Manny_Node_Status state;
 }
@@ -12,12 +12,12 @@ Manny_Execution_Node;
 
 struct Manny_Execution
 {
-	Arena               arena;
+	Arena                 arena;
 	Manny                *manny;
 	Manny_Execution_Node *nodes;
 
 	// TODO(RJ): this is scoped to the execution function, but we keep here for tests
-	Manny_Node           **ready;
+	Manny_Node         **ready;
 	u32                  ready_count;
 	u32                  ready_head;
 
@@ -216,15 +216,15 @@ Manny_Worker;
 
 struct Manny_Executor
 {
-	Manny_Execution        *execution;
-	Manny_Exec_Params       options;
-	Manny_Worker           *workers;
+	Manny_Execution      *execution;
+	Manny_Exec_Params     options;
+	Manny_Worker         *workers;
 	u32                   worker_count;
 	u32                   thread_count;
 	u32                   running;
-	Manny_Node            **work;
+	Manny_Node          **work;
 	u32                   work_count;
-	Manny_Event            *events;
+	Manny_Event          *events;
 	u32                   event_capacity;
 	u32                   event_head;
 	u32                   event_count;
@@ -260,28 +260,29 @@ static b32 dequeue_event_locked(Manny_Executor *executor, Manny_Event *event)
 	return true;
 }
 
-static u32 worker_main(void *data)
+static u32 manny_executor_worker_main(void *data)
 {
 	Manny_Worker *worker = data;
 	Manny_Executor *executor = worker->executor;
 	for (;;) {
-		Manny_Node *node;
-		Manny_Event completion;
-		Manny_Node_Context context;
-
-		day_lock_mutex(&executor->mutex);
-		while (!executor->stopping && executor->work_count == 0) {
-			if (day_wait_condition(&executor->work_available, &executor->mutex).error) {
-				log_fatal("failed waiting for worker queue");
-				request_stop_locked(executor);
+		{
+	      Profile_Scope scope = profile_scope_begin("waiting for work");
+			day_lock_mutex(&executor->mutex);
+			while (!executor->stopping && executor->work_count == 0) {
+				if (day_wait_condition(&executor->work_available, &executor->mutex).error) {
+					log_fatal("failed waiting for worker queue");
+					request_stop_locked(executor);
+				}
 			}
-		}
-		if (executor->stopping) {
-			day_unlock_mutex(&executor->mutex);
-			break;
+			if (executor->stopping) {
+				day_unlock_mutex(&executor->mutex);
+				profile_scope_end(&scope);
+				break;
+			}
+			profile_scope_end(&scope);
 		}
 
-		node = executor->work[--executor->work_count];
+		Manny_Node *node = executor->work[--executor->work_count];
 		if (!enqueue_event_locked(executor, (Manny_Event){ .type = MANNY_EVENT_STARTED, .node = node })) {
 			log_fatal("executor event queue exhausted");
 			request_stop_locked(executor);
@@ -290,8 +291,8 @@ static u32 worker_main(void *data)
 		}
 		day_unlock_mutex(&executor->mutex);
 
-		completion = (Manny_Event){ .type = MANNY_EVENT_COMPLETED, .node = node };
-		context = (Manny_Node_Context){
+		Manny_Event completion = (Manny_Event){ .type = MANNY_EVENT_COMPLETED, .node = node };
+		Manny_Node_Context context = (Manny_Node_Context) {
 			.execution = executor->execution,
 			.manny = executor->execution->manny,
 			.node = node,
@@ -391,7 +392,7 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 		internal_error = !worker->output->data;
 		if (internal_error) goto cleanup;
 		++execution->output_arena_count;
-		day_Result start = day_start_thread(worker_main, worker, &worker->thread);
+		day_Result start = day_start_thread(manny_executor_worker_main, worker, &worker->thread);
 		internal_error = start.error != DAY_ERROR_NONE;
 		if (internal_error) goto cleanup;
 		++executor.thread_count;
@@ -445,3 +446,4 @@ cleanup:
 	end_scratch(scratch);
 	return !internal_error && !manny_execution_has_failed(execution);
 }
+

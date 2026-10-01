@@ -2,7 +2,7 @@
 #define MANNY_TEST_H
 
 #include "manny_build.h"
-#include "build_record_stream.h"
+#include "build_record.h"
 #include "script.h"
 #include "compiler_command.h"
 #include "make_depfile.h"

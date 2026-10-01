@@ -25,8 +25,8 @@ static b32 test_record_stress(void)
 	Arena state_arena = arena_create(MEGABYTES(16));
 	Arena loaded_arena = arena_create(MEGABYTES(16));
 	Arena snapshot_arena = arena_create(KILOBYTES(256));
-	Build_Record_Stream state_stream = {0};
-	Build_Record_Stream loaded_stream = {0};
+	Manny_Build_Recorder state_stream = {0};
+	Manny_Build_Recorder loaded_stream = {0};
 	String_Array dependencies = {0};
 	Manny_Path_Array dependency_paths = {0};
 	String root = LIT("build\\build_state_stress");
@@ -52,9 +52,9 @@ static b32 test_record_stress(void)
 	} while (0)
 
 	CHECK_STRESS(manny && source_arena.data && state_arena.data && loaded_arena.data && snapshot_arena.data);
-	CHECK_STRESS(build_record_stream_init(&state_stream, &state_arena, manny) && build_record_stream_init(&loaded_stream, &loaded_arena, manny));
+	CHECK_STRESS(manny_build_recorder_init(&state_stream, &state_arena, manny) && manny_build_recorder_init(&loaded_stream, &loaded_arena, manny));
 	CHECK_STRESS(!day_remove_tree(root).error);
-	CHECK_STRESS(build_record_stream_compact(&state_stream, path));
+	CHECK_STRESS(manny_build_recorder_compact(&state_stream, path));
 	dependencies.items = arena_push_zero_aligned(&source_arena,
 		DEPENDENCY_COUNT * sizeof(*dependencies.items), _Alignof(String));
 	dependency_paths.items = arena_push_zero_aligned(&source_arena, DEPENDENCY_COUNT * sizeof(*dependency_paths.items), _Alignof(Manny_Path));
@@ -80,25 +80,25 @@ static b32 test_record_stress(void)
 		int length = snprintf(output, sizeof(output),
 			"build\\godot\\synthetic_%04u.windows.template_debug.x86_64.o", i);
 		CHECK_STRESS(length > 0 && (size_t)length < sizeof(output));
-		CHECK_STRESS(build_record_stream_append_set(&state_stream, path, (Build_Record_Task){
+		CHECK_STRESS(manny_build_recorder_append_set(&state_stream, path, (Build_Record_Task){
 			.output = test_path(manny, string_from_data(output, (u64)length)),
 			.fingerprint = test_fingerprint(string_from_data(output, (u64)length)),
 			.dependencies = dependency_paths,
 		}));
 	}
 	construction_finished = day_counter();
-	CHECK_STRESS(build_record_stream_compact(&state_stream, path));
+	CHECK_STRESS(manny_build_recorder_compact(&state_stream, path));
 	save_finished = day_counter();
 	CHECK_STRESS(manny_platform_file_info(path, &info));
-	CHECK_STRESS(build_record_stream_load(&loaded_stream, path) ==
+	CHECK_STRESS(manny_build_recorder_load(&loaded_stream, path) ==
 		BUILD_RECORD_OK);
 	load_finished = day_counter();
-	Build_Record_Snapshot snapshot;
-	CHECK_STRESS(build_record_stream_snapshot(&loaded_stream, &snapshot_arena, &snapshot));
+	Manny_Build_Snapshot snapshot;
+	CHECK_STRESS(manny_build_snapshot(&loaded_stream, &snapshot_arena, &snapshot));
 	CHECK_STRESS(snapshot.task_count == TASK_COUNT);
 	Build_Record_Task task;
-	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_0000.windows.template_debug.x86_64.o")), &task));
-	CHECK_STRESS(build_record_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_1885.windows.template_debug.x86_64.o")), &task));
+	CHECK_STRESS(manny_build_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_0000.windows.template_debug.x86_64.o")), &task));
+	CHECK_STRESS(manny_build_snapshot_get(&snapshot, test_path(manny, LIT("build\\godot\\synthetic_1885.windows.template_debug.x86_64.o")), &task));
 
 	printf("\n  record-stream stress measurements\n");
 	printf("    tasks: %u\n", (u32)TASK_COUNT);
@@ -119,8 +119,8 @@ static b32 test_record_stress(void)
 
 cleanup:
 	day_remove_tree(root);
-	build_record_stream_destroy(&loaded_stream);
-	build_record_stream_destroy(&state_stream);
+	manny_build_recorder_destroy(&loaded_stream);
+	manny_build_recorder_destroy(&state_stream);
 	arena_destroy(&snapshot_arena);
 	arena_destroy(&loaded_arena);
 	arena_destroy(&state_arena);

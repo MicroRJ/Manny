@@ -175,3 +175,4 @@ b32 manny_atom_is_valid(Manny_Atom atom)
 {
 	return atom.id != 0;
 }
+

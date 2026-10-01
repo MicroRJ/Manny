@@ -392,3 +392,4 @@ b32 vcvars_cache_load(void)
 	end_scratch(scratch);
 	return success;
 }
+

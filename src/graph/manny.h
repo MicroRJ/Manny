@@ -3,6 +3,7 @@
 
 #include "base.h"
 
+// TODO(RJ): remove this from here!
 #define MANNY_VERSION "0.3.0-dev"
 
 typedef struct Manny Manny;
@@ -132,3 +133,4 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options);
 const char *manny_error_string(Manny_Error result);
 
 #endif
+

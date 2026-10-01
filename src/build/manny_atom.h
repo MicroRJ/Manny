@@ -23,3 +23,4 @@ Manny_Atom manny_interner_intern(Manny_Interner *interner, String value);
 String manny_interner_string(const Manny_Interner *interner, Manny_Atom atom);
 
 #endif
+

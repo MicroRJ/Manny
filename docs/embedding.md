@@ -18,4 +18,4 @@ The build layer sits on top of that executor and adds:
 
 The elf frontend sits above the build layer and turns script tables into build tasks. It is one way to drive Manny, not a dependency of the generic graph executor.
 
-The public C declarations currently live in [`src/lib/manny.h`](https://github.com/MicroRJ/Manny/blob/master/src/lib/manny.h). The API is still allowed to evolve while Manny remains in early development.
+The public C declarations currently live in [`src/graph/manny.h`](https://github.com/MicroRJ/Manny/blob/master/src/graph/manny.h). The API is still allowed to evolve while Manny remains in early development.

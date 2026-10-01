@@ -20,6 +20,8 @@ But the script should not have to schedule work, track headers, propagate failur
 
 **That is Manny's job.**
 
+Manny is a self-contained, general-purpose, programmable build system with a bounded, well-defined core. Unlike build-system generators such as Meson and CMake, Manny does not generate files for another tool to execute. It constructs and runs the task graph itself.
+
 **This is Manny's raw task description.**
 
 ```elf
@@ -59,8 +61,7 @@ It receives the work and builds it.
 
 Manny handles parallel execution, compiler-discovered dependencies, fingerprints, persistent state, interruption, failure propagation, and explaining why something rebuilt. The script remains free to generate the graph however it wants.
 
-Writing every compile and link task by hand gets old, so I added a project
-lowerer:
+Writing every compile and link task by hand gets old. You can write whatever abstraction fits your project, or use the C project descriptor shipped with Manny:
 
 ```elf
 hello := {

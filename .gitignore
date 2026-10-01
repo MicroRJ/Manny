@@ -1,5 +1,7 @@
 # Script_Build output
 build/
+!/src/build/
+!/src/build/**
 
 # Release packages
 dist/

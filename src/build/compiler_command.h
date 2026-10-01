@@ -28,3 +28,4 @@ b32 compiler_command_add_dependencies(Arena *arena, const Compiler_Command *comm
 	String command_line, String dependency_file, String *result);
 
 #endif
+
