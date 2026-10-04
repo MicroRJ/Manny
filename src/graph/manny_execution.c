@@ -209,7 +209,7 @@ typedef struct Manny_Executor Manny_Executor;
 typedef struct Manny_Worker
 {
 	Manny_Executor   *executor;
-	day_Thread       thread;
+	dy_Thread       thread;
 	Arena          *output;
 }
 Manny_Worker;
@@ -228,17 +228,17 @@ struct Manny_Executor
 	u32                   event_capacity;
 	u32                   event_head;
 	u32                   event_count;
-	day_Mutex             mutex;
-	day_Condition         work_available;
-	day_Condition         event_available;
+	dy_Mutex             mutex;
+	dy_Condition         work_available;
+	dy_Condition         event_available;
 	b32                   stopping;
 };
 
 static void request_stop_locked(Manny_Executor *executor)
 {
 	executor->stopping = true;
-	day_broadcast_condition(&executor->work_available);
-	day_broadcast_condition(&executor->event_available);
+	dy_broadcast_condition(&executor->work_available);
+	dy_broadcast_condition(&executor->event_available);
 }
 
 static b32 enqueue_event_locked(Manny_Executor *executor, Manny_Event event)
@@ -247,7 +247,7 @@ static b32 enqueue_event_locked(Manny_Executor *executor, Manny_Event event)
 	u32 index = (executor->event_head + executor->event_count) % executor->event_capacity;
 	executor->events[index] = event;
 	++executor->event_count;
-	day_signal_condition(&executor->event_available);
+	dy_signal_condition(&executor->event_available);
 	return true;
 }
 
@@ -267,15 +267,15 @@ static u32 manny_executor_worker_main(void *data)
 	for (;;) {
 		{
 	      Profile_Scope scope = profile_scope_begin("waiting for work");
-			day_lock_mutex(&executor->mutex);
+			dy_lock_mutex(&executor->mutex);
 			while (!executor->stopping && executor->work_count == 0) {
-				if (day_wait_condition(&executor->work_available, &executor->mutex).error) {
+				if (dy_wait_condition(&executor->work_available, &executor->mutex).error) {
 					log_fatal("failed waiting for worker queue");
 					request_stop_locked(executor);
 				}
 			}
 			if (executor->stopping) {
-				day_unlock_mutex(&executor->mutex);
+				dy_unlock_mutex(&executor->mutex);
 				profile_scope_end(&scope);
 				break;
 			}
@@ -286,10 +286,10 @@ static u32 manny_executor_worker_main(void *data)
 		if (!enqueue_event_locked(executor, (Manny_Event){ .type = MANNY_EVENT_STARTED, .node = node })) {
 			log_fatal("executor event queue exhausted");
 			request_stop_locked(executor);
-			day_unlock_mutex(&executor->mutex);
+			dy_unlock_mutex(&executor->mutex);
 			break;
 		}
-		day_unlock_mutex(&executor->mutex);
+		dy_unlock_mutex(&executor->mutex);
 
 		Manny_Event completion = (Manny_Event){ .type = MANNY_EVENT_COMPLETED, .node = node };
 		Manny_Node_Context context = (Manny_Node_Context) {
@@ -306,12 +306,12 @@ static u32 manny_executor_worker_main(void *data)
 		}
 		if (!completion.result.succeeded) completion.result.changed = false;
 
-		day_lock_mutex(&executor->mutex);
+		dy_lock_mutex(&executor->mutex);
 		if (!enqueue_event_locked(executor, completion)) {
 			log_fatal("executor event queue exhausted");
 			request_stop_locked(executor);
 		}
-		day_unlock_mutex(&executor->mutex);
+		dy_unlock_mutex(&executor->mutex);
 	}
 	destroy_global_scratch();
 	return 0;
@@ -321,14 +321,14 @@ static void dispatch_ready(Manny_Executor *executor)
 {
 	u32 previous_work_count;
 	Manny_Node *node;
-	day_lock_mutex(&executor->mutex);
+	dy_lock_mutex(&executor->mutex);
 	previous_work_count = executor->work_count;
 	while (executor->running < executor->worker_count && take_ready(executor->execution, &node)) {
 		executor->work[executor->work_count++] = node;
 		++executor->running;
 	}
-	if (executor->work_count > previous_work_count) day_broadcast_condition(&executor->work_available);
-	day_unlock_mutex(&executor->mutex);
+	if (executor->work_count > previous_work_count) dy_broadcast_condition(&executor->work_available);
+	dy_unlock_mutex(&executor->mutex);
 }
 
 // TODO(RJ): we could split this into three functions:
@@ -376,11 +376,11 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 	internal_error = !executor.workers || !executor.work || !executor.events || !execution->output_arenas;
 	if (internal_error) goto cleanup;
 
-	if (day_init_mutex(&executor.mutex).error) { internal_error = true; goto cleanup; }
+	if (dy_init_mutex(&executor.mutex).error) { internal_error = true; goto cleanup; }
 	mutex_initialized = true;
-	if (day_init_condition(&executor.work_available).error) { internal_error = true; goto cleanup; }
+	if (dy_init_condition(&executor.work_available).error) { internal_error = true; goto cleanup; }
 	work_condition_initialized = true;
-	if (day_init_condition(&executor.event_available).error) { internal_error = true; goto cleanup; }
+	if (dy_init_condition(&executor.event_available).error) { internal_error = true; goto cleanup; }
 	event_condition_initialized = true;
 	synchronization_initialized = true;
 	for (u32 i = 0; i < executor.worker_count; ++i) {
@@ -392,8 +392,8 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 		internal_error = !worker->output->data;
 		if (internal_error) goto cleanup;
 		++execution->output_arena_count;
-		day_Result start = day_start_thread(manny_executor_worker_main, worker, &worker->thread);
-		internal_error = start.error != DAY_ERROR_NONE;
+		dy_Result start = dy_start_thread(manny_executor_worker_main, worker, &worker->thread);
+		internal_error = start.error != DY_ERROR_NONE;
 		if (internal_error) goto cleanup;
 		++executor.thread_count;
 	}
@@ -407,15 +407,15 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 			internal_error = true;
 			break;
 		}
-		day_lock_mutex(&executor.mutex);
+		dy_lock_mutex(&executor.mutex);
 		while (!executor.stopping && executor.event_count == 0) {
-			if (day_wait_condition(&executor.event_available, &executor.mutex).error) {
+			if (dy_wait_condition(&executor.event_available, &executor.mutex).error) {
 				log_fatal("failed waiting for worker event");
 				request_stop_locked(&executor);
 			}
 		}
 		has_event = dequeue_event_locked(&executor, &event);
-		day_unlock_mutex(&executor.mutex);
+		dy_unlock_mutex(&executor.mutex);
 		if (!has_event) {
 			internal_error = true;
 			break;
@@ -431,18 +431,18 @@ b32 manny_execute(Manny_Execution *execution, Manny_Exec_Params options)
 
 cleanup:
 	if (synchronization_initialized) {
-		day_lock_mutex(&executor.mutex);
+		dy_lock_mutex(&executor.mutex);
 		request_stop_locked(&executor);
-		day_unlock_mutex(&executor.mutex);
+		dy_unlock_mutex(&executor.mutex);
 	}
 	for (u32 i = 0; i < executor.thread_count; ++i) {
 		u32 return_code;
-		day_join_thread(executor.workers[i].thread, &return_code);
-		day_close_thread(&executor.workers[i].thread);
+		dy_join_thread(executor.workers[i].thread, &return_code);
+		dy_close_thread(&executor.workers[i].thread);
 	}
-	if (event_condition_initialized) day_destroy_condition(&executor.event_available);
-	if (work_condition_initialized) day_destroy_condition(&executor.work_available);
-	if (mutex_initialized) day_destroy_mutex(&executor.mutex);
+	if (event_condition_initialized) dy_destroy_condition(&executor.event_available);
+	if (work_condition_initialized) dy_destroy_condition(&executor.work_available);
+	if (mutex_initialized) dy_destroy_mutex(&executor.mutex);
 	end_scratch(scratch);
 	return !internal_error && !manny_execution_has_failed(execution);
 }

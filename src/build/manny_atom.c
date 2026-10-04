@@ -34,7 +34,7 @@ Manny_Interner_Table;
 struct Manny_Interner
 {
 	Arena              *arena;
-	day_Mutex           mutex;
+	dy_Mutex           mutex;
 	Manny_Interner_Table  table;
 };
 
@@ -120,20 +120,20 @@ Manny_Interner *manny_interner_create(Arena *arena)
 	Manny_Interner *interner = arena_push_zero_aligned(arena, sizeof(*interner), _Alignof(Manny_Interner));
 	if (!interner) return NULL;
 	interner->arena = arena;
-	if (day_init_mutex(&interner->mutex).error) return NULL;
+	if (dy_init_mutex(&interner->mutex).error) return NULL;
 	return interner;
 }
 
 void manny_interner_destroy(Manny_Interner *interner)
 {
-	if (interner) day_destroy_mutex(&interner->mutex);
+	if (interner) dy_destroy_mutex(&interner->mutex);
 }
 
 Manny_Atom manny_interner_intern(Manny_Interner *interner, String value)
 {
 	Manny_Atom atom = {0};
 	if (!interner || !value.data) return atom;
-	day_lock_mutex(&interner->mutex);
+	dy_lock_mutex(&interner->mutex);
 	Manny_Interner_Table *table = &interner->table;
 	if (table->entry_count == UINT32_MAX) goto done;
 	u64 hash = manny_atom_hash(value);
@@ -157,7 +157,7 @@ Manny_Atom manny_interner_intern(Manny_Interner *interner, String value)
 	}
 
 done:
-	day_unlock_mutex(&interner->mutex);
+	dy_unlock_mutex(&interner->mutex);
 	return atom;
 }
 
@@ -165,9 +165,9 @@ String manny_interner_string(const Manny_Interner *interner, Manny_Atom atom)
 {
 	String result = {0};
 	if (!interner || atom.id == 0) return result;
-	day_lock_mutex((day_Mutex *)&interner->mutex);
+	dy_lock_mutex((dy_Mutex *)&interner->mutex);
 	if (atom.id <= interner->table.entry_count) result = interner->table.entries[atom.id - 1].value;
-	day_unlock_mutex((day_Mutex *)&interner->mutex);
+	dy_unlock_mutex((dy_Mutex *)&interner->mutex);
 	return result;
 }
 

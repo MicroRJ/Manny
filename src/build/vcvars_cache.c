@@ -9,7 +9,7 @@
 
 #define VCVARS_CACHE_HEADER "MANNY_VCVARS_CACHE_V1"
 
-typedef day_Env_Field Env_Entry;
+typedef dy_Env_Field Env_Entry;
 
 typedef struct Env_Table
 {
@@ -310,7 +310,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 	Env_Table before = {0};
 	Env_Table after = {0};
 	Env_Diff_Table diff = {0};
-	day_Env_Table environment;
+	dy_Env_Table environment;
 	String after_capture;
 	String cache;
 	Manny_Platform_Process_Result process;
@@ -328,7 +328,7 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 		goto cleanup;
 	}
 
-	if (day_get_env_table(arena, &environment).error)
+	if (dy_get_env_table(arena, &environment).error)
 	{
 		log_error("unable to capture the current environment");
 		goto cleanup;

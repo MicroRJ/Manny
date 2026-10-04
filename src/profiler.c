@@ -42,9 +42,9 @@ void profiler_reset(void)
 	memset(thread_profiles, 0, sizeof(thread_profiles));
 	atomic_store_explicit(&thread_profile_count, 0, memory_order_relaxed);
 	atomic_fetch_add_explicit(&profile_generation, 1, memory_order_relaxed);
-	profile_frequency = day_counter_frequency();
-	profile_start = day_counter();
-	main_thread_id = day_current_thread_id();
+	profile_frequency = dy_counter_frequency();
+	profile_start = dy_counter();
+	main_thread_id = dy_current_thread_id();
 }
 
 
@@ -57,7 +57,7 @@ static Thread_Profile *get_thread_profile(void)
 	if (index >= MAX_PROFILE_THREADS) return NULL;
 	local_profile = &thread_profiles[index];
 	local_profile_generation = generation;
-	local_profile->thread_id = day_current_thread_id();
+	local_profile->thread_id = dy_current_thread_id();
 	return local_profile;
 }
 
@@ -85,7 +85,7 @@ Profile_Scope profile_scope_begin(const char *name)
 	if (!profile) return scope;
 	scope.entry = find_or_add_entry(profile, name);
 	if (scope.entry) {
-		scope.start = day_counter();
+		scope.start = dy_counter();
 		scope.recording = true;
 	}
 	return scope;
@@ -94,7 +94,7 @@ Profile_Scope profile_scope_begin(const char *name)
 void profile_scope_end(Profile_Scope *scope)
 {
 	if (!scope || !scope->recording) return;
-	u64 end = day_counter();
+	u64 end = dy_counter();
 	Profile_Entry *entry = scope->entry;
 	entry->elapsed += end - scope->start;
 	++entry->calls;
@@ -132,7 +132,7 @@ void profiler_print(b32 include_threads)
 {
 	if (!profiling_enabled || profile_frequency == 0) return;
 
-	u64 wall_ticks = day_counter() - profile_start;
+	u64 wall_ticks = dy_counter() - profile_start;
 	f64 ticks_to_ms = 1000.0 / (f64)profile_frequency;
 	u32 profile_count = atomic_load_explicit(&thread_profile_count, memory_order_relaxed);
 	if (profile_count > MAX_PROFILE_THREADS) profile_count = MAX_PROFILE_THREADS;

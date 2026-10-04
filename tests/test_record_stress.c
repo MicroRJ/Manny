@@ -32,7 +32,7 @@ static b32 test_record_stress(void)
 	String root = LIT("build\\build_state_stress");
 	String path = LIT("build\\build_state_stress\\state");
 	Manny_Platform_File_Info info;
-	u64 frequency = day_counter_frequency();
+	u64 frequency = dy_counter_frequency();
 	u64 construction_started;
 	u64 construction_finished;
 	u64 save_finished;
@@ -53,7 +53,7 @@ static b32 test_record_stress(void)
 
 	CHECK_STRESS(manny && source_arena.data && state_arena.data && loaded_arena.data && snapshot_arena.data);
 	CHECK_STRESS(manny_build_recorder_init(&state_stream, &state_arena, manny) && manny_build_recorder_init(&loaded_stream, &loaded_arena, manny));
-	CHECK_STRESS(!day_remove_tree(root).error);
+	CHECK_STRESS(!dy_remove_tree(root).error);
 	CHECK_STRESS(manny_build_recorder_compact(&state_stream, path));
 	dependencies.items = arena_push_zero_aligned(&source_arena,
 		DEPENDENCY_COUNT * sizeof(*dependencies.items), _Alignof(String));
@@ -74,7 +74,7 @@ static b32 test_record_stress(void)
 		++dependency_paths.count;
 	}
 
-	construction_started = day_counter();
+	construction_started = dy_counter();
 	for (u32 i = 0; i < TASK_COUNT; ++i) {
 		char output[128];
 		int length = snprintf(output, sizeof(output),
@@ -86,13 +86,13 @@ static b32 test_record_stress(void)
 			.dependencies = dependency_paths,
 		}));
 	}
-	construction_finished = day_counter();
+	construction_finished = dy_counter();
 	CHECK_STRESS(manny_build_recorder_compact(&state_stream, path));
-	save_finished = day_counter();
+	save_finished = dy_counter();
 	CHECK_STRESS(manny_platform_file_info(path, &info));
 	CHECK_STRESS(manny_build_recorder_load(&loaded_stream, path) ==
 		BUILD_RECORD_OK);
-	load_finished = day_counter();
+	load_finished = dy_counter();
 	Manny_Build_Snapshot snapshot;
 	CHECK_STRESS(manny_build_snapshot(&loaded_stream, &snapshot_arena, &snapshot));
 	CHECK_STRESS(snapshot.task_count == TASK_COUNT);
@@ -118,7 +118,7 @@ static b32 test_record_stress(void)
 	result = true;
 
 cleanup:
-	day_remove_tree(root);
+	dy_remove_tree(root);
 	manny_build_recorder_destroy(&loaded_stream);
 	manny_build_recorder_destroy(&state_stream);
 	arena_destroy(&snapshot_arena);

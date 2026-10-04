@@ -80,7 +80,7 @@ static b32 test_record_round_trip(void)
 	CHECK(build && arena.data && loaded_arena.data && snapshot_arena.data);
 	CHECK(manny_build_recorder_init(&stream, &arena, build));
 	CHECK(manny_build_recorder_init(&loaded, &loaded_arena, build));
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	CHECK(manny_build_recorder_compact(&stream, file));
 	CHECK(append_task(&arena, build, &stream, file, LIT("build/main.obj"),
 		STRING_ARRAY_FROM(dependencies), 101, LIT("main fingerprint")));
@@ -96,7 +96,7 @@ static b32 test_record_round_trip(void)
 	CHECK(snapshot_get(build, &loaded, &snapshot_arena, LIT("build/empty.obj"), &task, NULL));
 	CHECK(task.output_stamp == 202 && task.dependencies.count == 0);
 
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	manny_build_recorder_destroy(&loaded);
 	manny_build_recorder_destroy(&stream);
 	arena_destroy(&snapshot_arena);
@@ -126,7 +126,7 @@ static b32 test_record_recovery(void)
 	CHECK(build && arena.data && loaded_arena.data && io_arena.data && snapshot_arena.data);
 	CHECK(manny_build_recorder_init(&stream, &arena, build));
 	CHECK(manny_build_recorder_init(&loaded, &loaded_arena, build));
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	CHECK(manny_build_recorder_load(&loaded, missing) == BUILD_RECORD_MISSING);
 	CHECK(manny_build_recorder_compact(&stream, file));
 	CHECK(append_task(&arena, build, &stream, file, LIT("build/first.obj"), (String_Array){0}, 1, LIT("first")));
@@ -157,7 +157,7 @@ static b32 test_record_recovery(void)
 
 	CHECK(manny_platform_write_entire_file(file, malformed, sizeof(malformed) - 1));
 	CHECK(manny_build_recorder_load(&loaded, file) == BUILD_RECORD_INVALID);
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	manny_build_recorder_destroy(&loaded);
 	manny_build_recorder_destroy(&stream);
 	arena_destroy(&snapshot_arena);
@@ -186,7 +186,7 @@ static b32 test_record_append_and_remove(void)
 	CHECK(build && arena.data && loaded_arena.data && snapshot_arena.data);
 	CHECK(manny_build_recorder_init(&stream, &arena, build));
 	CHECK(manny_build_recorder_init(&loaded, &loaded_arena, build));
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	CHECK(manny_build_recorder_compact(&stream, file));
 	CHECK(append_task(&arena, build, &stream, file, LIT("build/main.obj"),
 		STRING_ARRAY_FROM(first), 101, LIT("first")));
@@ -203,7 +203,7 @@ static b32 test_record_append_and_remove(void)
 	CHECK(!snapshot_get(build, &loaded, &snapshot_arena, LIT("build/main.obj"), &task, &task_count));
 	CHECK(task_count == 0);
 
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	manny_build_recorder_destroy(&loaded);
 	manny_build_recorder_destroy(&stream);
 	arena_destroy(&snapshot_arena);
@@ -228,7 +228,7 @@ static b32 test_record_snapshot_is_immutable(void)
 
 	CHECK(build && arena.data && snapshot_arena.data);
 	CHECK(manny_build_recorder_init(&stream, &arena, build));
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	CHECK(manny_build_recorder_compact(&stream, file));
 	CHECK(append_task(&arena, build, &stream, file, LIT("build/main.obj"),
 		STRING_ARRAY_FROM(first), 101, LIT("first")));
@@ -242,7 +242,7 @@ static b32 test_record_snapshot_is_immutable(void)
 	CHECK(snapshot_get(build, &stream, &snapshot_arena, LIT("build/main.obj"), &task, NULL));
 	CHECK(task.output_stamp == 202 && record_task_contains(build, &task, replacement[0]));
 
-	CHECK(!day_remove_tree(root).error);
+	CHECK(!dy_remove_tree(root).error);
 	manny_build_recorder_destroy(&stream);
 	arena_destroy(&snapshot_arena);
 	arena_destroy(&arena);

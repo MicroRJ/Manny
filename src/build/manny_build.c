@@ -117,7 +117,7 @@ static b32 manny_path_is_absolute(String path)
 
 static b32 manny_path_absolute(Arena *arena, String path, String *result)
 {
-	return !day_get_absolute_path(arena, path, result).error;
+	return !dy_get_absolute_path(arena, path, result).error;
 }
 
 static String manny_path_normalize_separators(String path)
@@ -363,7 +363,7 @@ static void run_command(Manny_Node_Context *context, Manny_Build *build, const B
 	String dependency_file = manny_path_string(build, task->dependency_file);
 	String execution_directory = manny_path_string(build, task->execution_directory);
 	if (task->tracks_dependencies) {
-		day_remove_file(dependency_file);
+		dy_remove_file(dependency_file);
 	}
 
 	manny_platform_run_command(task->execution_command_line, context->arena,
@@ -392,7 +392,7 @@ static void run_command(Manny_Node_Context *context, Manny_Build *build, const B
 				else ++completion->dependencies.count;
 			}
 		}
-		day_remove_file(dependency_file);
+		dy_remove_file(dependency_file);
 	}
 	end_scratch(scratch);
 }

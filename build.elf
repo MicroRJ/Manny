@@ -128,7 +128,7 @@ entries.bless = fun() {
 
 	manny_commit := run_line("git rev-parse HEAD")
 	elf_commit := run_line("git -C elf rev-parse HEAD")
-	dayan_commit := run_line("git -C dayan-core rev-parse HEAD")
+	dy_commit := run_line("git -C dy-core rev-parse HEAD")
 	hash_result := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
 	elf.assert(hash_result.success, f"could not hash build/manny.exe\n${hash_result.stderr}")
 	hash_lines := hash_result.stdout:lines()
@@ -143,7 +143,7 @@ entries.bless = fun() {
 	manifest += f"- manny_source_commit        := ${manny_commit}\n"
 	manifest += "- elf_version                := 0.2.0-dev\n"
 	manifest += f"- elf_commit                 := ${elf_commit}\n"
-	manifest += f"- dayan_core_commit          := ${dayan_commit}\n"
+	manifest += f"- dy_core_commit          := ${dy_commit}\n"
 	manifest += f"- executable_size            := ${file_size} bytes\n"
 	manifest += f"- SHA-256                    := ${sha256}\n"
 	fs.write_text_file(f"${archive_directory}/manifest.md", manifest)

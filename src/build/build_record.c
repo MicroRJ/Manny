@@ -614,20 +614,20 @@ static b32 append_bytes(String path, const void *data, u64 size)
 
 	b32 result = false;
 
-	day_File file;
-	if (!day_access_file(path, DAY_FILE_OPEN_EXISTING, DAY_FILE_WRITE | DAY_FILE_SHARE_READ, &file).error)
+	dy_File file;
+	if (!dy_access_file(path, DY_FILE_OPEN_EXISTING, DY_FILE_WRITE | DY_FILE_SHARE_READ, &file).error)
 	{
 		u64 position;
-		if (!day_set_file_cursor(file, DAY_SEEK_END, 0, &position).error) {
+		if (!dy_set_file_cursor(file, DY_SEEK_END, 0, &position).error) {
 
 			u64 written = 0;
-			if (!day_write_file(file, data, size, &written).error) {
+			if (!dy_write_file(file, data, size, &written).error) {
 				result = written == size;
 			}
 		}
 
 		// TODO(RJ): we could succeed and yet not be able to close to file?!
-		if (day_close_file(file).error) result = false;
+		if (dy_close_file(file).error) result = false;
 	}
 
 	return result;
@@ -753,7 +753,7 @@ b32 manny_build_recorder_compact(Manny_Build_Recorder *stream, String path)
 	if (!arena.data) goto done;
 	parent = build_record_parent_directory(path);
 	if (parent.size) {
-		if (day_create_directories(parent).error) goto done;
+		if (dy_create_directories(parent).error) goto done;
 	}
 	{
 		void *start = arena_top(&arena);
@@ -764,11 +764,11 @@ b32 manny_build_recorder_compact(Manny_Build_Recorder *stream, String path)
 	}
 	if (!build_record_stream_encode_with_paths(&arena, stream, &compacted, &encoded)) goto done;
 	if (!manny_platform_write_entire_file(temporary, encoded.data, (size_t)encoded.size)) goto done;
-	if (day_move_file(temporary, path, true).error) goto done;
+	if (dy_move_file(temporary, path, true).error) goto done;
 	result = true;
 
 	done:
-	if (!result && temporary.data) day_remove_file(temporary);
+	if (!result && temporary.data) dy_remove_file(temporary);
 	if (result) build_record_stream_replace_paths(stream, &compacted);
 	else arena_restore(stream->arena, mark);
 	arena_destroy(&arena);

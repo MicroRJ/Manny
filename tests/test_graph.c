@@ -197,7 +197,7 @@ static Manny_Node_Result generic_test_action(Manny_Node_Context *context, void *
 static void generic_test_event(Manny_Event event, void *user_data)
 {
 	Generic_Execution_Test *execution = user_data;
-	if (day_current_thread_id() != execution->callback_thread || !event.node) execution->valid = false;
+	if (dy_current_thread_id() != execution->callback_thread || !event.node) execution->valid = false;
 	if (event.type == MANNY_EVENT_STARTED) {
 		if (event.result.output || event.result.succeeded || event.result.changed) execution->valid = false;
 		for (u32 i = 0; i < execution->started; ++i) {
@@ -241,7 +241,7 @@ static b32 test_generic_graph_actions(void)
 	Manny_Node *sum = NULL;
 	Manny_Execution *graph_execution = NULL;
 	Generic_Execution_Test execution = {
-		.callback_thread = day_current_thread_id(),
+		.callback_thread = dy_current_thread_id(),
 		.valid = true,
 	};
 	Generic_Action_Test actions[] = {
