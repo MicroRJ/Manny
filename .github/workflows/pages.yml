@@ -27,8 +27,6 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install pandoc
-        uses: r-lib/actions/setup-pandoc@v2
       - name: Build website
         run: .\blessed\manny.exe build.elf site
       - uses: actions/configure-pages@v5

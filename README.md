@@ -79,7 +79,7 @@ for building Manny itself.
 - [How](https://microrj.github.io/Manny/#how)
 - [Step-by-step guide](https://microrj.github.io/Manny/#step-by-step-guide)
 
-The canonical sources live under [`docs`](docs).
+The website source lives in [`site/index.html`](site/index.html).
 
 ## Build from source
 

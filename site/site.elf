@@ -8,7 +8,7 @@ prepare := {
 }
 
 targets := {}
-for asset := { "style.css", ".nojekyll" }[...] ? {
+for asset := { "index.html", "style.css", ".nojekyll" }[...] ? {
 	copy := {
 		name = f"copy website asset ${asset}",
 		command_line = f"cmd /d /c copy /Y site\\${asset} build\\site\\${asset} >nul",
@@ -19,19 +19,5 @@ for asset := { "style.css", ".nojekyll" }[...] ? {
 	}
 	targets:add(copy)
 }
-
-generate := {
-	name = "generate website",
-	command_line = "pandoc docs/human.md docs/guide.md --from=markdown --to=html5 --standalone --syntax-highlighting=none --wrap=none --template=site/index.html --output=build/site/index.html",
-	inputs = {
-		"site/index.html",
-		"docs/human.md",
-		"docs/guide.md",
-	},
-	outputs = { "build/site/index.html" },
-	include_dirs = {},
-	dependencies = { prepare },
-}
-targets:add(generate)
 
 ret targets
