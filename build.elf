@@ -127,8 +127,8 @@ entries.bless = fun() {
 	elf.printl(f"\x1b[2;36mThe sacred binary rests at ${archive}\x1b[0m")
 
 	manny_commit := run_line("git rev-parse HEAD")
-	elf_commit := run_line("git -C elf rev-parse HEAD")
-	dy_commit := run_line("git -C dy-core rev-parse HEAD")
+	elf_commit := run_line("git -C deps/elf rev-parse HEAD")
+	dy_commit := run_line("git -C deps/dy-core rev-parse HEAD")
 	hash_result := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
 	elf.assert(hash_result.success, f"could not hash build/manny.exe\n${hash_result.stderr}")
 	hash_lines := hash_result.stdout:lines()

@@ -1,15 +1,19 @@
+working_directory := elf.fs.get_working_directory()
+elf.assert(elf.fs.set_working_directory("deps"), "could not enter the dependency directory")
 elf_project := elf.load_file("elf/project.elf")
-elf_project.root = "elf"
+elf.assert(elf.fs.set_working_directory(working_directory), "could not restore the working directory")
+elf_project.root = "deps/elf"
+elf_project.subprojects.dy.root = "deps/dy-core"
 
 blake3 := {
 	kind = "static_library",
 	name = "blake3",
 	sources = {
-		"blake3/c/blake3.c",
-		"blake3/c/blake3_dispatch.c",
-		"blake3/c/blake3_portable.c",
+		"deps/blake3/c/blake3.c",
+		"deps/blake3/c/blake3_dispatch.c",
+		"deps/blake3/c/blake3_portable.c",
 	},
-	public_include_directories = { "blake3/c" },
+	public_include_directories = { "deps/blake3/c" },
 	defines = {
 		"BLAKE3_NO_SSE2",
 		"BLAKE3_NO_SSE41",

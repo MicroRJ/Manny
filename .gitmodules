@@ -1,9 +1,9 @@
 [submodule "elf"]
-	path = elf
+	path = deps/elf
 	url = https://github.com/MicroRJ/elf
 [submodule "dy-core"]
-	path = dy-core
+	path = deps/dy-core
 	url = https://github.com/MicroRJ/dy-core.git
 [submodule "blake3"]
-	path = blake3
+	path = deps/blake3
 	url = https://github.com/BLAKE3-team/BLAKE3.git
