@@ -4,7 +4,7 @@
 
 [Website](https://microrj.github.io/Manny/) ·
 [Download](https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev) ·
-[Why Manny?](https://microrj.github.io/Manny/why.html)
+[Why Manny?](https://microrj.github.io/Manny/#why)
 
 Manny is a small hackable build system for C and C++.
 
@@ -22,21 +22,19 @@ the public API and build-state format may still change.
 ## A build
 
 ```elf
-c ::= manny.load("c")
+elf.fs.create_directories("build")
 
-hello ::= c.executable({
+hello := {
 	name = "hello",
-	sources = { "main.c", "message.c" },
-	private_include_directories = { "include" },
-})
+	command_line = "clang-cl main.c /Febuild/hello.exe",
+	inputs = { "main.c" },
+	outputs = { "build/hello.exe" },
+}
 
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({
-		targets = { hello.task },
-		options = { workers = 4 },
-	})
+	ret manny.build({ targets = { hello } })
 }
 
 ret entries
@@ -46,17 +44,11 @@ Save that as `build.elf`, then run Manny:
 
 ```text
 > manny
-[1/3 succeeded] compile hello: main.c
-[2/3 succeeded] compile hello: message.c
-[3/3 succeeded] link hello
+[1/1 succeeded] hello
 
 > manny --explain
-[explain] compile hello: main.c: inputs are not newer than outputs
-[1/3 up-to-date] compile hello: main.c
-[explain] compile hello: message.c: inputs are not newer than outputs
-[2/3 up-to-date] compile hello: message.c
-[explain] link hello: inputs are not newer than outputs
-[3/3 up-to-date] link hello
+[explain] hello: inputs are not newer than outputs
+[1/1 up-to-date] hello
 ```
 
 `c.elf` is an optional helper written in elf. It generates ordinary Manny task
@@ -77,17 +69,15 @@ Open a command prompt in its `hello` directory, then run:
 ..\manny.exe --explain
 ```
 
-See the [complete getting-started guide](https://microrj.github.io/Manny/getting-started.html)
+See the [step-by-step guide](https://microrj.github.io/Manny/#step-by-step-guide)
 for building Manny itself.
 
 ## Documentation
 
-- [Why Manny?](https://microrj.github.io/Manny/why.html)
-- [Getting started](https://microrj.github.io/Manny/getting-started.html)
-- [Tasks and graphs](https://microrj.github.io/Manny/tasks.html)
-- [C and C++ targets](https://microrj.github.io/Manny/c.html)
-- [Command line](https://microrj.github.io/Manny/command-line.html)
-- [Embedding Manny](https://microrj.github.io/Manny/embedding.html)
+- [What](https://microrj.github.io/Manny/#what)
+- [Why](https://microrj.github.io/Manny/#why)
+- [How](https://microrj.github.io/Manny/#how)
+- [Step-by-step guide](https://microrj.github.io/Manny/#step-by-step-guide)
 
 The canonical sources live under [`docs`](docs).
 
