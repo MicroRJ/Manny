@@ -1,5 +1,41 @@
 // C and C++ targets built on Manny's task graph.
 
+// NOTE(RJ):
+//
+// This helper describes C and C++ projects at a high level and generates Manny
+// tasks from those descriptions.
+//
+// Proposed public schema:
+//
+// project :: contract
+// {
+// 	requirements :: contract
+// 	{
+// 		includes:        array(str) = {}
+// 		defines:         array(str) = {}
+// 		libraries:       array(str) = {}
+// 		compile_options: array(str) = {}
+// 		link_options:    array(str) = {}
+// 	}
+//
+// 	output :: contract
+// 	{
+// 		name:    str
+// 		kind:    choices("library", "executable")
+// 		sources: array(str)
+// 		deps:    array(ref(output)) = {}
+// 		private: requirements = {}
+// 		public:  requirements = {}
+// 	}
+//
+// 	root:    str = "."
+// 	outputs: array(output)
+// }
+//
+// Dependencies refer directly to other outputs. Private requirements apply
+// only while building an output. Public requirements are inherited by outputs
+// that depend on it.
+
 project_to_tasks ::= fun(project, options) {
 	options = options ?? {}
 	style ::= options.style ?? "msvc"
