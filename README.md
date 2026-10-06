@@ -79,7 +79,9 @@ for building Manny itself.
 - [How](https://microrj.github.io/Manny/#how)
 - [Step-by-step guide](https://microrj.github.io/Manny/#step-by-step-guide)
 
-The website source lives in [`site/index.html`](site/index.html).
+The website shell and inline styles live in [`site/page.html`](site/page.html).
+The guide content lives in [`site/guide.dodo`](site/guide.dodo) and is rendered
+into that page during the site build.
 
 ## Build from source
 
