@@ -7,38 +7,17 @@ prepare := {
 	dependencies = {},
 }
 
-render_guide := {
-	name = "render Manny guide",
-	command_line = "..\\dodo\\build\\dodo.exe site\\guide.dodo build\\manny-guide.html",
-	inputs = {
-		"../dodo/build/dodo.exe",
-		"site/guide.dodo",
-	},
-	outputs = { "build/manny-guide.html" },
-	include_dirs = {},
-	dependencies = {},
+targets := {}
+for asset := { "index.html", ".nojekyll" }[...] ? {
+	copy := {
+		name = f"copy website asset ${asset}",
+		command_line = f"cmd /d /c copy /Y site\\${asset} build\\site\\${asset} >nul",
+		inputs = { f"site/${asset}" },
+		outputs = { f"build/site/${asset}" },
+		include_dirs = {},
+		dependencies = { prepare },
+	}
+	targets:add(copy)
 }
 
-assemble_page := {
-	name = "assemble Manny website",
-	command_line = "..\\dodo\\build\\dodo-preprocess.exe site\\page.html build\\site\\index.html",
-	inputs = {
-		"../dodo/build/dodo-preprocess.exe",
-		"site/page.html",
-		"build/manny-guide.html",
-	},
-	outputs = { "build/site/index.html" },
-	include_dirs = {},
-	dependencies = { prepare, render_guide },
-}
-
-copy_nojekyll := {
-	name = "copy .nojekyll",
-	command_line = "cmd /d /c copy /Y site\\.nojekyll build\\site\\.nojekyll >nul",
-	inputs = { "site/.nojekyll" },
-	outputs = { "build/site/.nojekyll" },
-	include_dirs = {},
-	dependencies = { prepare },
-}
-
-ret { assemble_page, copy_nojekyll }
+ret targets
