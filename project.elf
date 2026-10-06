@@ -59,54 +59,32 @@ test_support := {
 	dependencies = { core },
 }
 
-base_tests := {
-	kind = "test",
-	name = "test_base",
-	sources = { "tests/test_base.c" },
-	dependencies = { test_support },
+test_paths := elf.fs.get_paths("tests")
+elf.assert(test_paths != nil, "could not scan the tests directory")
+test_paths:sort(fun(left, right) ret left:compare(right))
+
+test_targets := {}
+for path := test_paths[...] ? {
+	if path:glob_match("tests/test_*.c") ? {
+		name := elf.path.stem(path)
+		category := "unit_"
+		if name:ends_with("_stress") ? { category = "stress_" }
+		test_targets.[category + name] = {
+			kind = "test",
+			name = name,
+			sources = { path },
+			dependencies = { test_support },
+		}
+	}
 }
 
-graph_tests := {
-	kind = "test",
-	name = "test_graph",
-	sources = { "tests/test_graph.c" },
-	dependencies = { test_support },
+targets := {
+	blake3 = blake3,
+	core = core,
+	executable = executable,
+	test_support = test_support,
 }
-
-build_tests := {
-	kind = "test",
-	name = "test_build",
-	sources = { "tests/test_build.c" },
-	dependencies = { test_support },
-}
-
-record_tests := {
-	kind = "test",
-	name = "test_record",
-	sources = { "tests/test_record.c" },
-	dependencies = { test_support },
-}
-
-compiler_tests := {
-	kind = "test",
-	name = "test_compiler",
-	sources = { "tests/test_compiler.c" },
-	dependencies = { test_support },
-}
-
-script_tests := {
-	kind = "test",
-	name = "test_script",
-	sources = { "tests/test_script.c" },
-	dependencies = { test_support },
-}
-
-record_stress := {
-	kind = "test",
-	name = "test_record_stress",
-	sources = { "tests/test_record_stress.c" },
-	dependencies = { test_support },
-}
+targets = targets:merge(test_targets)
 
 ret {
 	name = "manny",
@@ -115,17 +93,5 @@ ret {
 		elf = elf_project,
 	},
 	default_target = executable,
-	targets = {
-		blake3 = blake3,
-		core = core,
-		executable = executable,
-		test_support = test_support,
-		base_tests = base_tests,
-		graph_tests = graph_tests,
-		build_tests = build_tests,
-		record_tests = record_tests,
-		compiler_tests = compiler_tests,
-		script_tests = script_tests,
-		record_stress = record_stress,
-	},
+	targets = targets,
 }

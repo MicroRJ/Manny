@@ -17,15 +17,21 @@ stage_c_module := {
 	dependencies = {},
 }
 
-make_test_target ::= fun(tasks) {
-	unit_tests := {
-		tasks.targets.base_tests,
-		tasks.targets.graph_tests,
-		tasks.targets.build_tests,
-		tasks.targets.record_tests,
-		tasks.targets.compiler_tests,
-		tasks.targets.script_tests,
+find_targets ::= fun(tasks, prefix) {
+	matches := {}
+	pairs := tasks.targets:pairs()
+	pairs:sort(fun(left, right) ret left[0]:compare(right[0]))
+
+	for pair := pairs[...] ? {
+		if pair[0]:starts_with(prefix) ? { matches:add(pair[1]) }
 	}
+
+	elf.assert(matches:length() > 0, f"no targets found with prefix '${prefix}'")
+	ret matches
+}
+
+make_test_target ::= fun(tasks) {
+	unit_tests := find_targets(tasks, "unit_test_")
 
 	previous_test := nil
 	for test := unit_tests[...] ? {
@@ -79,7 +85,7 @@ entries.test = fun() {
 
 entries.stress = fun() {
 	tasks := load_project_tasks()
-	ret manny.build({ targets = { tasks.targets.record_stress }, options = options })
+	ret manny.build({ targets = find_targets(tasks, "stress_test_"), options = options })
 }
 
 entries.site = fun() {
