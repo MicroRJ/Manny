@@ -79,7 +79,11 @@ for building Manny itself.
 - [How](https://microrj.github.io/Manny/#how)
 - [Step-by-step guide](https://microrj.github.io/Manny/#step-by-step-guide)
 
-The generated website is checked in at [`site/index.html`](site/index.html).
+The authored page shell and inline styles live in
+[`site/page.html`](site/page.html), and the guide source lives in
+[`site/guide.dodo`](site/guide.dodo). They are generated offline into the
+checked-in [`site/index.html`](site/index.html), which the site build copies for
+deployment.
 
 ## Build from source
 

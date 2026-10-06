@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Manny is an all-in-one, radically minimal build system for C and C++.">
+	<meta property="og:title" content="Manny">
+	<meta property="og:description" content="An all-in-one, radically minimal build system for C and C++.">
+	<meta property="og:type" content="website">
+	<meta property="og:url" content="https://microrj.github.io/Manny/">
+	<title>Manny</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+	<style>
+		:root {
+			--paper: #eee6d9;
+			--paper-deep: #e2d5c3;
+			--ink: #2b211c;
+			--muted: #78695f;
+			--orange: #c95f2d;
+			--orange-dark: #9f431c;
+			--code: #e4d8c7;
+			--sans: "IBM Plex Sans", Arial, sans-serif;
+			--mono: "IBM Plex Mono", Consolas, monospace;
+		}
+		
+		* {
+			box-sizing: border-box;
+		}
+		
+		html {
+			scroll-behavior: smooth;
+		}
+		
+		body,
+		h1,
+		h2,
+		h3,
+		p,
+		pre {
+			margin: 0;
+		}
+		
+		body {
+			background: var(--paper);
+			color: var(--ink);
+			font: 18px/1.6 var(--sans);
+			-webkit-font-smoothing: antialiased;
+		}
+		
+		a {
+			color: inherit;
+			text-decoration: none;
+		}
+		
+		.landing {
+			display: grid;
+			min-height: 100svh;
+			grid-template-rows: auto 1fr;
+		}
+		
+		header,
+		.hero,
+		.manual,
+		footer {
+			width: min(100% - 48px, 1080px);
+			margin: 0 auto;
+		}
+		
+		header {
+			display: flex;
+			min-height: 96px;
+			align-items: center;
+			justify-content: flex-end;
+		}
+		
+		header nav {
+			display: flex;
+			align-items: center;
+			gap: 28px;
+			color: var(--muted);
+			font-size: 15px;
+		}
+		
+		header a,
+		.guide-links a,
+		footer a {
+			transition: color 140ms ease;
+		}
+		
+		header a:hover,
+		header a:focus-visible,
+		.guide-links a:hover,
+		.guide-links a:focus-visible,
+		footer a:hover,
+		footer a:focus-visible {
+			color: var(--orange);
+		}
+		
+		.header-download {
+			padding: 9px 14px;
+			border: 1px solid var(--orange-dark);
+			border-radius: 999px;
+			color: var(--orange-dark);
+		}
+		
+		.hero {
+			display: grid;
+			align-content: center;
+			gap: clamp(48px, 8vh, 80px);
+			padding: 40px 0 10vh;
+		}
+		
+		.hero h1 {
+			font: 400 clamp(52px, 10.8vw, 112px)/0.88 "Bagel Fat One", var(--sans);
+			letter-spacing: 0;
+			white-space: nowrap;
+		}
+		
+		.hero-build {
+			color: var(--orange-dark);
+		}
+		
+		.hero-description {
+			max-width: 700px;
+			margin-top: 38px;
+			font-size: clamp(21px, 2.5vw, 27px);
+			font-weight: 500;
+			letter-spacing: -0.015em;
+		}
+		
+		.code-block,
+		.article pre {
+			border-radius: 10px;
+			background: var(--code);
+		}
+		
+		pre {
+			overflow-x: auto;
+			padding: clamp(26px, 4vw, 46px);
+			font: 500 clamp(13px, 1.55vw, 16px)/1.7 var(--mono);
+			tab-size: 4;
+		}
+		
+		.hero-example pre {
+			font-size: clamp(20px, 3vw, 30px);
+			line-height: 1.5;
+		}
+		
+		.variable,
+		.call,
+		.property {
+			font-weight: 600;
+		}
+		
+		.variable {
+			color: #713b29;
+		}
+		
+		.call {
+			color: #b44820;
+		}
+		
+		.property {
+			color: #5f493e;
+		}
+		
+		.manual {
+			display: grid;
+			grid-template-columns: 200px minmax(0, 760px);
+			justify-content: space-between;
+			gap: 64px;
+			padding: clamp(90px, 12vw, 140px) 0 clamp(110px, 15vw, 170px);
+			scroll-margin-top: 24px;
+		}
+		
+		.guide-sidebar {
+			align-self: start;
+			position: sticky;
+			top: 32px;
+		}
+		
+		.guide-links,
+		.guide-links a {
+			display: block;
+		}
+		
+		.guide-links h2 {
+			margin: 0 0 7px;
+			color: var(--orange-dark);
+			font: 500 12px/1.4 var(--mono);
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+		}
+		
+		.guide-links h2:not(:first-child) {
+			margin-top: 24px;
+		}
+		
+		.guide-links a {
+			padding: 3px 0;
+			color: var(--muted);
+			font-size: 15px;
+			line-height: 1.5;
+		}
+		
+		.article {
+			min-width: 0;
+		}
+		
+		.article h1,
+		.article h2,
+		.article h3 {
+			scroll-margin-top: 32px;
+		}
+		
+		.article h1 {
+			margin-bottom: 34px;
+			font-family: "Bagel Fat One", var(--sans);
+			font-size: clamp(42px, 6vw, 64px);
+			font-weight: 400;
+			letter-spacing: 0;
+			line-height: 1.05;
+		}
+		
+		.article h1:not(:first-child) {
+			margin-top: clamp(90px, 12vw, 140px);
+		}
+		
+		.article hr + h1 {
+			margin-top: 0;
+		}
+		
+		.article h2 {
+			margin: 64px 0 18px;
+			font-size: clamp(27px, 3.5vw, 36px);
+			font-weight: 500;
+			letter-spacing: -0.025em;
+			line-height: 1.2;
+		}
+		
+		.article h3 {
+			margin: 48px 0 16px;
+			font-size: 24px;
+			line-height: 1.25;
+		}
+		
+		.article p,
+		.article li {
+			font-size: clamp(17px, 2vw, 20px);
+		}
+		
+		.article p {
+			margin: 22px 0;
+		}
+		
+		.article ul,
+		.article ol {
+			margin: 24px 0;
+			padding-left: 28px;
+		}
+		
+		.article li {
+			padding: 3px 0 3px 7px;
+		}
+		
+		.article a {
+			color: var(--orange-dark);
+			text-decoration: underline;
+			text-decoration-thickness: 1px;
+			text-underline-offset: 3px;
+		}
+		
+		.article a:hover,
+		.article a:focus-visible {
+			color: var(--orange);
+		}
+		
+		.article :not(pre) > code {
+			padding: 0.1em 0.3em;
+			border-radius: 4px;
+			background: var(--paper-deep);
+			font: 500 0.85em var(--mono);
+		}
+		
+		.article pre {
+			margin: 34px 0;
+		}
+		
+		.article blockquote {
+			margin: 56px 0;
+			color: var(--orange-dark);
+			font-size: clamp(27px, 4vw, 40px);
+			font-weight: 500;
+			letter-spacing: -0.025em;
+			line-height: 1.2;
+		}
+		
+		.article blockquote p {
+			margin: 8px 0;
+			font-size: inherit;
+		}
+		
+		.article hr {
+			margin: clamp(90px, 12vw, 140px) 0;
+			border: 0;
+			border-top: 1px solid var(--paper-deep);
+		}
+		
+		footer {
+			display: flex;
+			justify-content: space-between;
+			padding: 30px 0 48px;
+			color: var(--muted);
+			font-size: 14px;
+		}
+		
+		footer a {
+			color: var(--orange-dark);
+		}
+		
+		@media (max-width: 760px) {
+			header,
+			.hero,
+			.manual,
+			footer {
+				width: min(100% - 36px, 1080px);
+			}
+		
+			header {
+				min-height: 76px;
+			}
+		
+			header nav {
+				gap: 12px 18px;
+			}
+		
+			header nav > a:not(.header-download) {
+				display: none;
+			}
+		
+			.hero {
+				align-content: start;
+				padding-top: 10vh;
+			}
+		
+			.hero h1 {
+				font-size: clamp(38px, 12vw, 58px);
+			}
+		
+			.hero-example pre {
+				font-size: 14px;
+			}
+		
+			.manual {
+				grid-template-columns: 1fr;
+				gap: 80px;
+			}
+		
+			.guide-sidebar {
+				position: static;
+			}
+		
+			.article pre {
+				width: calc(100vw - 24px);
+				margin-left: 50%;
+				transform: translateX(-50%);
+			}
+		}
+		
+		@media (prefers-reduced-motion: reduce) {
+			html {
+				scroll-behavior: auto;
+			}
+		
+			header a,
+			.guide-links a,
+			footer a {
+				transition: none;
+			}
+		}
+		/* Generated guide navigation */
+		.toc-label {
+			margin: 0 0 7px;
+			color: var(--orange-dark);
+			font: 500 12px/1.4 var(--mono);
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+		}
+		
+		.table-of-contents ol {
+			margin: 0;
+			padding: 0;
+			list-style: none;
+		}
+		
+		.table-of-contents li {
+			padding: 0;
+		}
+		
+		.table-of-contents a {
+			display: block;
+			padding: 3px 0;
+			color: var(--muted);
+			font-size: 15px;
+			line-height: 1.5;
+			transition: color 140ms ease;
+		}
+		
+		.table-of-contents.toc-start-1 .toc-level-2 {
+			padding-left: 14px;
+		}
+		
+		.table-of-contents a:hover,
+		.table-of-contents a:focus-visible {
+			color: var(--orange);
+		}
+		
+		@media (prefers-reduced-motion: reduce) {
+			.table-of-contents a {
+				transition: none;
+			}
+		}
+	</style>
+</head>
+<body>
+	<section class="landing">
+		<header>
+			<nav aria-label="Project links">
+				<a href="#why">Why Manny?</a>
+				<a href="#guide">Guide</a>
+				<a href="https://github.com/MicroRJ/Manny">GitHub</a>
+				<a class="header-download" href="https://github.com/MicroRJ/Manny/releases/tag/v0.3.0-dev">Download 0.3.0-dev <span aria-hidden="true">&#8595;</span></a>
+			</nav>
+		</header>
+
+		<div class="hero">
+			<div class="hero-copy">
+				<h1><span>manny</span><span class="hero-build">.build</span><span>()</span></h1>
+				<p class="hero-description">An all-in-one, radically minimal build system for C and C++.</p>
+			</div>
+
+			<div class="code-block hero-example">
+				<pre><code><span class="variable">manny</span>.<span class="call">build</span> { <span class="property">targets</span> = { <span class="variable">hello</span> } }</code></pre>
+			</div>
+		</div>
+	</section>
+
+	{{{ ../build/manny-guide.html }}}
+<footer>
+	<p>Manny lives <a href="https://github.com/MicroRJ/Manny">on GitHub</a>.</p>
+	<p>0.3.0-dev</p>
+</footer>
+</body>
+</html>
