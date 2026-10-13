@@ -2,6 +2,7 @@
 #define SCRIPT_H
 
 #include "manny_build.h"
+#include "elf.h"
 
 typedef struct Script_Invocation_Options
 {
@@ -13,12 +14,12 @@ typedef struct Script_Invocation_Options
 }
 Script_Invocation_Options;
 
-typedef struct Elf_Script Elf_Script;
 typedef struct Script Script;
 struct Script
 {
 	Arena *arena;
-	Elf_Script *elf;
+	elf_State *state;
+	elf_Ref exports;
 	String_Array functions;
 	String error;
 	Script_Invocation_Options invocation_options;

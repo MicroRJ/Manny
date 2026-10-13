@@ -37,7 +37,7 @@ core := {
 		"src/build/compiler_command.c",
 		"src/build/make_depfile.c",
 		"src/script.c",
-		"src/scripts/elf_adapter.c",
+		"src/scripts/elf_manny.c",
 		"src/platform_adapter.c",
 	],
 	public_include_directories = [ "src", "src/graph", "src/build" ],

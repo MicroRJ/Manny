@@ -31,7 +31,7 @@ static b32 test_script_functions(void)
     static const char source[] =
         "build := fun() {\n"
         "    ret manny.build({\n"
-        "        targets = {},\n"
+        "        targets = [],\n"
         "        options = {workers = 1, verbosity = 0},\n"
         "    })\n"
         "}\n"
