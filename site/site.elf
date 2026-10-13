@@ -1,23 +1,8 @@
-prepare := {
-	name = "prepare website directory",
-	command_line = "cmd /c if not exist build\\site mkdir build\\site",
-	inputs = {},
-	outputs = { "build/site" },
-	include_dirs = {},
-	dependencies = {},
-}
-
-targets := {}
-for asset := { "index.html", ".nojekyll" }[...] ? {
-	copy := {
-		name = f"copy website asset ${asset}",
-		command_line = f"cmd /d /c copy /Y site\\${asset} build\\site\\${asset} >nul",
-		inputs = { f"site/${asset}" },
-		outputs = { f"build/site/${asset}" },
-		include_dirs = {},
-		dependencies = { prepare },
+ret fun() {
+	elf.assert(elf.fs.create_directories("build/site"), "could not create build/site")
+	assets := [ "index.html", ".nojekyll" ]
+	for asset := assets[...] ? {
+		elf.assert(elf.fs.copy_file(f"site/${asset}", f"build/site/${asset}", true), f"could not copy website asset '${asset}'")
 	}
-	targets:add(copy)
+	ret 1
 }
-
-ret targets

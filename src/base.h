@@ -53,9 +53,9 @@ typedef dy_String_Array String_Array;
 #define arena_restore dy_arena_restore
 #define arena_top dy_arena_top
 #define arena_reserve dy_arena_reserve
-#define arena_push dy_arena_push
-#define arena_push_zero dy_arena_push_zero
-#define arena_push_copy dy_arena_push_copy
+#define arena_push(arena, size) dy_arena_push((arena), (size), 1)
+#define arena_push_zero(arena, size) dy_arena_push_zero((arena), (size), 1)
+#define arena_push_copy(arena, size, data) dy_arena_push_copy((arena), (size), 1, (data))
 #define arena_push_data dy_arena_push_data
 #define arena_push_repeat dy_arena_push_nchar
 #define arena_appendfv dy_arena_pushfv
@@ -85,20 +85,17 @@ typedef dy_String_Array String_Array;
 
 static inline void *arena_push_aligned(Arena *arena, u64 size, u64 alignment)
 {
-	dy_arena_align(arena, alignment);
-	return dy_arena_push(arena, size);
+	return dy_arena_push(arena, size, alignment);
 }
 
 static inline void *arena_push_zero_aligned(Arena *arena, u64 size, u64 alignment)
 {
-	dy_arena_align(arena, alignment);
-	return dy_arena_push_zero(arena, size);
+	return dy_arena_push_zero(arena, size, alignment);
 }
 
 static inline void *arena_push_copy_aligned(Arena *arena, u64 size, u64 alignment, const void *data)
 {
-	dy_arena_align(arena, alignment);
-	return dy_arena_push_copy(arena, size, data);
+	return dy_arena_push_copy(arena, size, alignment, data);
 }
 
 static inline char *arena_append_str(Arena *arena, String string)

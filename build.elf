@@ -4,26 +4,22 @@ load_project_tasks ::= fun() {
 	ret c_module.project_to_tasks(project, {
 		compiler = "clang-cl",
 		output_directory = "build",
-		compile_options = { "/std:c11", "/Zi", "/Od" },
+		compile_options = [ "/std:c11", "/Zi", "/Od" ],
 	})
 }
 
-stage_c_module := {
-	name = "stage C target module",
-	command_line = "cmd /d /c copy /Y modules\\c.elf build\\c.elf >nul",
-	inputs = { "modules/c.elf" },
-	outputs = { "build/c.elf" },
-	include_dirs = {},
-	dependencies = {},
+stage_c_module ::= fun() {
+	elf.assert(elf.fs.create_directories("build"), "could not create build directory")
+	elf.assert(elf.fs.copy_file("modules/c.elf", "build/c.elf", true), "could not stage modules/c.elf")
 }
 
 find_targets ::= fun(tasks, prefix) {
-	matches := {}
-	pairs := tasks.targets:pairs()
-	pairs:sort(fun(left, right) ret left[0]:compare(right[0]))
+	matches := []
+	names := tasks.targets:keys()
+	names:sort(fun(left, right) ret left:compare(right))
 
-	for pair := pairs[...] ? {
-		if pair[0]:starts_with(prefix) ? { matches:add(pair[1]) }
+	for name := names[...] ? {
+		if name:starts_with(prefix) ? { matches:add(tasks.targets[name]) }
 	}
 
 	elf.assert(matches:length() > 0, f"no targets found with prefix '${prefix}'")
@@ -41,30 +37,32 @@ make_test_target ::= fun(tasks) {
 
 	run_c_helper_example := {
 		name = "run C helper example",
-		command_line = "build\\manny.exe build.elf run",
+		exec = "build\\manny.exe",
+		args = [ "build.elf", "run" ],
 		working_directory = "example",
-		inputs = { "../build/manny.exe", "../modules/c.elf", "build.elf", "main.c", "message.c", "message.h" },
-		outputs = {},
-		include_dirs = {},
-		dependencies = { tasks.default_task, stage_c_module, previous_test },
+		inputs = [ "../build/manny.exe", "../modules/c.elf", "build.elf", "main.c", "message.c", "message.h" ],
+		outputs = [],
+		include_dirs = [],
+		dependencies = [ tasks.default_task, previous_test ],
 	}
 
 	ret {
 		name = "run C helper integration test",
-		command_line = "build\\manny.exe build.elf test",
+		exec = "build\\manny.exe",
+		args = [ "build.elf", "test" ],
 		working_directory = "tests/fixtures/c_helper",
-		inputs = {
+		inputs = [
 			"../../../build/manny.exe", "../../../modules/c.elf", "build.elf", "codegen.c",
 			"fixture.c", "fixture_test.c", "main.c", "include/fixture.h",
-		},
-		outputs = {},
-		include_dirs = {},
-		dependencies = { run_c_helper_example },
+		],
+		outputs = [],
+		include_dirs = [],
+		dependencies = [ run_c_helper_example ],
 	}
 }
 
-site_targets := elf.load_file("site/site.elf")
-elf.assert(elf.type_of(site_targets) == "table", "site/site.elf must return its targets")
+build_site := elf.load_file("site/site.elf")
+elf.assert(elf.type_of(build_site) == "closure", "site/site.elf must return its build function")
 
 options := {
 	workers = 4,
@@ -74,13 +72,15 @@ options := {
 entries := {}
 
 entries.build = fun() {
+	stage_c_module()
 	tasks := load_project_tasks()
-	ret manny.build({ targets = { tasks.default_task, stage_c_module }, options = options })
+	ret manny.build({ targets = [ tasks.default_task ], options = options })
 }
 
 entries.test = fun() {
+	stage_c_module()
 	tasks := load_project_tasks()
-	ret manny.build({ targets = { make_test_target(tasks) }, options = options })
+	ret manny.build({ targets = [ make_test_target(tasks) ], options = options })
 }
 
 entries.stress = fun() {
@@ -89,12 +89,12 @@ entries.stress = fun() {
 }
 
 entries.site = fun() {
-	ret manny.build({ targets = site_targets, options = options })
+	ret build_site()
 }
 
 format_number := fun(number)
 {
-	parts := {}
+	parts := []
 	while number ? {
 		parts:add(number % 1000)
 		number /= 1000
@@ -113,12 +113,48 @@ format_number := fun(number)
 	ret formatted
 }
 
-run_line := fun(command)
+find_executable := fun(name)
 {
-	result := elf.process.run(command)
-	elf.assert(result.success, f"command failed: ${command}\n${result.stderr}")
-	elf.assert(result.stdout:length(), f"command produced no output: ${command}")
-	ret result.stdout:lines()[0]
+	if elf.fs.file_exists(name) ? { ret name }
+	path := elf.env.get("PATH")
+	elf.assert(path != nil, "PATH is not set")
+	for directory := path:split(";")[...] ? {
+		candidate := elf.path.join(directory, name)
+		if elf.fs.file_exists(candidate) ? { ret candidate }
+	}
+	elf.assert(0, f"could not find executable '${name}'")
+}
+
+run_capture := fun(executable, arguments)
+{
+	executable_path := find_executable(executable)
+	pipe_status, reader, writer := elf.io.pipe()
+	elf.assert(pipe_status == elf.io.SUCCESS, f"could not create output pipe for '${executable}'")
+	process_status, process := elf.process.start(executable_path, arguments, { stdout = writer, hide_window = 1 })
+	elf.assert(process_status == elf.io.SUCCESS, f"could not start '${executable}'")
+	elf.assert(writer:close() == elf.io.SUCCESS, f"could not close output pipe for '${executable}'")
+
+	output := elf.buffer()
+	read_status := elf.io.SUCCESS
+	read_count := 0
+	while read_status == elf.io.SUCCESS ? {
+		read_status, read_count = reader:read(output, 4096)
+	}
+	elf.assert(read_status == elf.io.END_OF_STREAM, f"could not read output from '${executable}'")
+	elf.assert(reader:close() == elf.io.SUCCESS, f"could not close output pipe for '${executable}'")
+
+	process_state, exit_code := process:wait()
+	elf.assert(process_state == elf.process.EXITED, f"could not wait for '${executable}'")
+	elf.assert(process:close() == elf.io.SUCCESS, f"could not close '${executable}'")
+	elf.assert(exit_code == 0, f"'${executable}' exited with code ${exit_code}")
+	text := output:to_string():trim()
+	elf.assert(text:length(), f"'${executable}' produced no output")
+	ret text
+}
+
+run_line := fun(executable, arguments)
+{
+	ret run_capture(executable, arguments):lines()[0]:trim()
 }
 
 entries.bless = fun() {
@@ -132,14 +168,13 @@ entries.bless = fun() {
 	elf.printl(f"\x1b[1;33mManny ${manny.version} has been blessed. Go forth and compile.\x1b[0m")
 	elf.printl(f"\x1b[2;36mThe sacred binary rests at ${archive}\x1b[0m")
 
-	manny_commit := run_line("git rev-parse HEAD")
-	elf_commit := run_line("git -C deps/elf rev-parse HEAD")
-	dy_commit := run_line("git -C deps/dy-core rev-parse HEAD")
-	hash_result := elf.process.run("certutil -hashfile build\\manny.exe SHA256")
-	elf.assert(hash_result.success, f"could not hash build/manny.exe\n${hash_result.stderr}")
-	hash_lines := hash_result.stdout:lines()
+	manny_commit := run_line("git.exe", [ "rev-parse", "HEAD" ])
+	elf_commit := run_line("git.exe", [ "-C", "deps/elf", "rev-parse", "HEAD" ])
+	dy_commit := run_line("git.exe", [ "-C", "deps/dy-core", "rev-parse", "HEAD" ])
+	hash_output := run_capture("certutil.exe", [ "-hashfile", "build\\manny.exe", "SHA256" ])
+	hash_lines := hash_output:lines()
 	elf.assert(hash_lines:length() >= 2, "certutil returned invalid hash output")
-	sha256 := hash_lines[1]
+	sha256 := hash_lines[1]:trim()
 
 	file_size := format_number(fs.read_text_file("build/manny.exe"):length())
 
@@ -149,7 +184,7 @@ entries.bless = fun() {
 	manifest += f"- manny_source_commit        := ${manny_commit}\n"
 	manifest += "- elf_version                := 0.2.0-dev\n"
 	manifest += f"- elf_commit                 := ${elf_commit}\n"
-	manifest += f"- dy_core_commit          := ${dy_commit}\n"
+	manifest += f"- dy_core_commit             := ${dy_commit}\n"
 	manifest += f"- executable_size            := ${file_size} bytes\n"
 	manifest += f"- SHA-256                    := ${sha256}\n"
 	fs.write_text_file(f"${archive_directory}/manifest.md", manifest)

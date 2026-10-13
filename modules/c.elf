@@ -54,36 +54,21 @@ project_to_tasks ::= fun(project, options) {
 	compiler ::= options.compiler ?? default_compiler
 	archiver ::= options.archiver ?? default_archiver
 	output_directory ::= options.output_directory ?? "build"
-	common_compile_options ::= options.compile_options ?? {}
-	common_link_options ::= options.link_options ?? {}
+	common_compile_options ::= options.compile_options ?? []
+	common_link_options ::= options.link_options ?? []
 	executable_suffix ::= options.executable_suffix ?? default_executable_suffix
 
 	elf.assert(elf.fs.create_directories(output_directory), f"could not create C project output directory '${output_directory}'")
 
-	quote ::= fun(value) ret f"\"${value}\""
-
-	append_options ::= fun(command, values) {
-		if values:length() ? ret f"${command} ${" ":join(values)}"
-		ret command
+	clone_table ::= fun(source) {
+		result := {}
+		for key := source:keys()[...] ? { result[key] = source[key] }
+		ret result
 	}
 
-	append_includes ::= fun(command, values) {
-		prefix := "-I"
-		if style == "msvc" ? { prefix = "/I" }
-		for value := values[...] ? { command += f" ${prefix}${quote(value)}" }
-		ret command
-	}
-
-	append_defines ::= fun(command, values) {
-		prefix := "-D"
-		if style == "msvc" ? { prefix = "/D" }
-		for value := values[...] ? { command += f" ${prefix}${value}" }
-		ret command
-	}
-
-	append_quoted ::= fun(command, values) {
-		for value := values[...] ? { command += f" ${quote(value)}" }
-		ret command
+	append_prefixed ::= fun(arguments, prefix, values) {
+		for value := values[...] ? { arguments:add(prefix + value) }
+		ret arguments
 	}
 
 	path_directory ::= fun(path) {
@@ -99,12 +84,12 @@ project_to_tasks ::= fun(project, options) {
 	}
 
 	dependency_usage ::= fun(dependencies) {
-		include_directories := {}
-		defines := {}
-		compile_options := {}
-		link_options := {}
-		libraries := {}
-		tasks := {}
+		include_directories := []
+		defines := []
+		compile_options := []
+		link_options := []
+		libraries := []
+		tasks := []
 
 		for dependency := dependencies[...] ? {
 			elf.assert(elf.type_of(dependency) == "table" && elf.type_of(dependency.task) == "table",
@@ -128,50 +113,57 @@ project_to_tasks ::= fun(project, options) {
 	}
 
 	compile_sources ::= fun(name, sources, description, dependency_info) {
-		elf.assert(elf.type_of(sources) == "table", f"c target '${name}' requires a sources table")
+		elf.assert(elf.type_of(sources) == "array", f"c target '${name}' requires a sources array")
 		object_directory := f"${output_directory}/obj/${name}"
 		elf.assert(elf.fs.create_directories(object_directory), f"could not create '${object_directory}'")
 
-		private_includes := description.private_include_directories ?? {}
-		public_includes := description.public_include_directories ?? {}
-		includes := private_includes:clone():extend(public_includes, dependency_info.include_directories)
-		defines := (description.defines ?? {}):clone():extend(description.public_defines ?? {}, dependency_info.defines)
-		compile_options := common_compile_options:clone():extend(description.compile_options ?? {}, description.public_compile_options ?? {}, dependency_info.compile_options)
-		target_generated_inputs := description.generated_inputs ?? {}
+		private_includes := description.private_include_directories ?? []
+		public_includes := description.public_include_directories ?? []
+		includes := private_includes:slice():extend(public_includes, dependency_info.include_directories)
+		defines := (description.defines ?? []):slice():extend(description.public_defines ?? [], dependency_info.defines)
+		compile_options := common_compile_options:slice():extend(description.compile_options ?? [], description.public_compile_options ?? [], dependency_info.compile_options)
+		target_generated_inputs := description.generated_inputs ?? []
+		define_prefix := "-D"
+		include_prefix := "-I"
+		if style == "msvc" ? {
+			define_prefix = "/D"
+			include_prefix = "/I"
+		}
 
-		objects := {}
-		tasks := {}
+		objects := []
+		tasks := []
 		index := 0
 		for source := sources[...] ? {
 			source_path := source
-			generated_inputs := target_generated_inputs:clone()
+			generated_inputs := target_generated_inputs:slice()
 			if elf.is_string(source) == false ? {
 				elf.assert(elf.type_of(source) == "table", f"invalid source in target '${name}'")
 				source_path = source.path
 				if source.kind == "generated_file" ? { generated_inputs:add(source) }
-				generated_inputs:extend(source.generated_inputs ?? {})
+				generated_inputs:extend(source.generated_inputs ?? [])
 			}
 			elf.assert(elf.is_string(source_path), f"invalid source path in target '${name}'")
 
 			generated_paths := generated_inputs:map(fun(generated) ret generated.path)
 			generated_tasks := generated_inputs:map(fun(generated) ret generated.task)
 			generated_includes := generated_paths:map(fun(path) ret path_directory(path))
-			source_includes := includes:clone():extend(generated_includes)
+			source_includes := includes:slice():extend(generated_includes)
 			object := f"${object_directory}/${object_name(source_path, index)}"
 
-			command := quote(compiler)
-			if style == "msvc" ? { command += " /nologo" }
-			command = append_options(command, compile_options)
-			command = append_defines(command, defines)
-			command = append_includes(command, source_includes)
-			if style == "msvc" ? { command += f" /c ${quote(source_path)} /Fo${quote(object)}" }
-			else { command += f" -c ${quote(source_path)} -o ${quote(object)}" }
+			arguments := []
+			if style == "msvc" ? { arguments:add("/nologo") }
+			arguments:extend(compile_options)
+			arguments = append_prefixed(arguments, define_prefix, defines)
+			arguments = append_prefixed(arguments, include_prefix, source_includes)
+			if style == "msvc" ? { arguments:extend([ "/c", source_path, f"/Fo${object}" ]) }
+			else { arguments:extend([ "-c", source_path, "-o", object ]) }
 
 			task := {
 				name = f"compile ${name}: ${source_path}",
-				command_line = command,
-				inputs = { source_path }:extend(generated_paths),
-				outputs = { object },
+				exec = compiler,
+				args = arguments,
+				inputs = [ source_path ]:extend(generated_paths),
+				outputs = [ object ],
 				include_dirs = source_includes,
 				dependencies = generated_tasks,
 			}
@@ -186,28 +178,25 @@ project_to_tasks ::= fun(project, options) {
 	static_library := fun(description) {
 		name := description.name
 		elf.assert(elf.is_string(name), "static_library target requires a name")
-		dependencies := description.dependencies ?? {}
+		dependencies := description.dependencies ?? []
 		dependency_info := dependency_usage(dependencies)
 		compiled := compile_sources(name, description.sources, description, dependency_info)
 		output := f"${output_directory}/lib${name}.a"
 		if style == "msvc" ? { output = f"${output_directory}/${name}.lib" }
 
-		command := quote(archiver)
-		if style == "msvc" ? { command += f" /nologo /OUT:${quote(output)}" }
-		else { command += " rcs" }
-		if style == "msvc" ? { command = append_quoted(command, compiled.objects) }
-		else {
-			command += f" ${quote(output)}"
-			command = append_quoted(command, compiled.objects)
-		}
+		arguments := []
+		if style == "msvc" ? { arguments:extend([ "/nologo", f"/OUT:${output}" ]) }
+		else { arguments:extend([ "rcs", output ]) }
+		arguments:extend(compiled.objects)
 
 		task := {
 			name = f"archive ${name}",
-			command_line = command,
+			exec = archiver,
+			args = arguments,
 			inputs = compiled.objects,
-			outputs = { output },
-			include_dirs = {},
-			dependencies = compiled.tasks:clone():extend(dependency_info.tasks),
+			outputs = [ output ],
+			include_dirs = [],
+			dependencies = compiled.tasks:slice():extend(dependency_info.tasks),
 		}
 
 		ret {
@@ -216,11 +205,11 @@ project_to_tasks ::= fun(project, options) {
 			output = output,
 			task = task,
 			usage = {
-				include_directories = (description.public_include_directories ?? {}):clone():extend(dependency_info.include_directories),
-				defines = (description.public_defines ?? {}):clone():extend(dependency_info.defines),
-				compile_options = (description.public_compile_options ?? {}):clone():extend(dependency_info.compile_options),
-				link_options = (description.public_link_options ?? {}):clone():extend(dependency_info.link_options),
-				libraries = { output }:extend(dependency_info.libraries),
+				include_directories = (description.public_include_directories ?? []):slice():extend(dependency_info.include_directories),
+				defines = (description.public_defines ?? []):slice():extend(dependency_info.defines),
+				compile_options = (description.public_compile_options ?? []):slice():extend(dependency_info.compile_options),
+				link_options = (description.public_link_options ?? []):slice():extend(dependency_info.link_options),
+				libraries = [ output ]:extend(dependency_info.libraries),
 			},
 		}
 	}
@@ -228,30 +217,34 @@ project_to_tasks ::= fun(project, options) {
 	executable := fun(description) {
 		name := description.name
 		elf.assert(elf.is_string(name), "executable target requires a name")
-		dependencies := description.dependencies ?? {}
+		dependencies := description.dependencies ?? []
 		dependency_info := dependency_usage(dependencies)
 		compiled := compile_sources(name, description.sources, description, dependency_info)
 		output := f"${output_directory}/${name}${executable_suffix}"
-		link_options := common_link_options:clone():extend(description.link_options ?? {}, dependency_info.link_options)
-		link_inputs := compiled.objects:clone():extend(dependency_info.libraries)
+		link_options := common_link_options:slice():extend(description.link_options ?? [], dependency_info.link_options)
+		link_inputs := compiled.objects:slice():extend(dependency_info.libraries)
 
-		command := append_quoted(quote(compiler), link_inputs)
+		arguments := link_inputs:slice()
 		if style == "msvc" ? {
-			command += f" /Fe${quote(output)}"
-			if link_options:length() ? { command = append_options(f"${command} /link", link_options) }
+			arguments:add(f"/Fe${output}")
+			if link_options:length() ? {
+				arguments:add("/link")
+				arguments:extend(link_options)
+			}
 		}
 		else {
-			command = append_options(command, link_options)
-			command += f" -o ${quote(output)}"
+			arguments:extend(link_options)
+			arguments:extend([ "-o", output ])
 		}
 
 		task := {
 			name = f"link ${name}",
-			command_line = command,
+			exec = compiler,
+			args = arguments,
 			inputs = link_inputs,
-			outputs = { output },
-			include_dirs = {},
-			dependencies = compiled.tasks:clone():extend(dependency_info.tasks),
+			outputs = [ output ],
+			include_dirs = [],
+			dependencies = compiled.tasks:slice():extend(dependency_info.tasks),
 		}
 
 		ret {
@@ -260,11 +253,11 @@ project_to_tasks ::= fun(project, options) {
 			output = output,
 			task = task,
 			usage = {
-				include_directories = {},
-				defines = {},
-				compile_options = {},
-				link_options = {},
-				libraries = {},
+				include_directories = [],
+				defines = [],
+				compile_options = [],
+				link_options = [],
+				libraries = [],
 			},
 		}
 	}
@@ -274,8 +267,8 @@ project_to_tasks ::= fun(project, options) {
 		elf.assert(elf.is_string(description.output), "generated_file target requires an output")
 		program := description.program
 		program_path := program
-		dependencies := (description.dependencies ?? {}):clone()
-		inputs := (description.inputs ?? {}):clone()
+		dependencies := (description.dependencies ?? []):slice()
+		inputs := (description.inputs ?? []):slice()
 		if elf.is_string(program) == false ? {
 			elf.assert(elf.type_of(program) == "table" && elf.is_string(program.output), "generated file program must be a path or executable target")
 			program_path = program.output
@@ -285,18 +278,17 @@ project_to_tasks ::= fun(project, options) {
 
 		output := f"${output_directory}/${description.output}"
 		elf.assert(elf.fs.create_directories(path_directory(output)), f"could not create output directory for '${output}'")
-		arguments := description.arguments ?? {}
+		arguments := description.arguments ?? []
 		argument_type := elf.type_of(arguments)
 		if argument_type == "function" || argument_type == "closure" ? { arguments = arguments(output) }
-		elf.assert(elf.type_of(arguments) == "table", "generated file arguments must be a table or function")
-		command := append_quoted(quote(program_path), arguments)
-
+		elf.assert(elf.type_of(arguments) == "array", "generated file arguments must be an array or function")
 		task := {
 			name = description.name,
-			command_line = command,
+			exec = program_path,
+			args = arguments,
 			inputs = inputs,
-			outputs = { output },
-			include_dirs = {},
+			outputs = [ output ],
+			include_dirs = [],
 			dependencies = dependencies,
 		}
 		ret { kind = "generated_file", path = output, output = output, task = task }
@@ -305,14 +297,15 @@ project_to_tasks ::= fun(project, options) {
 	run := fun(description) {
 		target := description.target
 		elf.assert(elf.type_of(target) == "table" && target.kind == "executable", "run target requires an executable target")
-		arguments := description.arguments ?? {}
+		arguments := description.arguments ?? []
 		task := {
 			name = description.name ?? f"run ${target.name}",
-			command_line = append_quoted(quote(target.output), arguments),
-			inputs = { target.output },
-			outputs = {},
-			include_dirs = {},
-			dependencies = { target.task },
+			exec = target.output,
+			args = arguments,
+			inputs = [ target.output ],
+			outputs = [],
+			include_dirs = [],
+			dependencies = [ target.task ],
 		}
 		ret { name = task.name, kind = "run", task = task }
 	}
@@ -324,7 +317,7 @@ project_to_tasks ::= fun(project, options) {
 			kind = "test",
 			output = target.output,
 			build_task = target.task,
-			task = run({ target = target, name = f"test ${target.name}", arguments = description.arguments ?? {} }).task,
+			task = run({ target = target, name = f"test ${target.name}", arguments = description.arguments ?? [] }).task,
 		}
 	}
 
@@ -335,11 +328,12 @@ project_to_tasks ::= fun(project, options) {
 		owners := {}
 		visited_projects := {}
 		index_project := fun(current) {
-			if visited_projects.[current] != nil ? ret
-			visited_projects.[current] = true
+			if visited_projects[current] != nil ? ret
+			visited_projects[current] = true
 			elf.assert(elf.type_of(current.targets) == "table", "project requires a targets table")
-			for target := current.targets:values()[...] ? { owners.[target] = current }
-			for child := (current.subprojects ?? {}):values()[...] ? { recurse(child) }
+			for name := current.targets:keys()[...] ? { owners[current.targets[name]] = current }
+			subprojects := current.subprojects ?? {}
+			for name := subprojects:keys()[...] ? { recurse(subprojects[name]) }
 		}
 		index_project(project)
 
@@ -360,17 +354,17 @@ project_to_tasks ::= fun(project, options) {
 				elf.assert(description.default_target != nil, f"project '${description.name}' requires a default target")
 				ret recurse(description.default_target)
 			}
-			cached := generated.[description]
+			cached := generated[description]
 			if cached != nil ? ret cached
 
-			owner := owners.[description]
+			owner := owners[description]
 			elf.assert(owner != nil, f"target '${description.name}' does not belong to the project tree")
 			kind := description.kind
-			lowered := description:clone()
+			lowered := clone_table(description)
 			if kind == "generated_file" ? {
-				lowered.inputs = root_paths(owner, description.inputs ?? {})
-				lowered.dependencies = {}
-				for dependency := (description.dependencies ?? {})[...] ? {
+				lowered.inputs = root_paths(owner, description.inputs ?? [])
+				lowered.dependencies = []
+				for dependency := (description.dependencies ?? [])[...] ? {
 					lowered.dependencies:add(recurse(dependency).task)
 				}
 				if elf.is_string(description.program) ? { lowered.program = root_path(owner, description.program) }
@@ -382,24 +376,24 @@ project_to_tasks ::= fun(project, options) {
 				cached = run(lowered)
 			}
 			else {
-				lowered.sources = {}
-				for source := (description.sources ?? {})[...] ? {
+				lowered.sources = []
+				for source := (description.sources ?? [])[...] ? {
 					if elf.is_string(source) ? { lowered.sources:add(root_path(owner, source)) }
 					else if source.kind == "generated_file" ? { lowered.sources:add(recurse(source)) }
 					else {
-						rooted := source:clone()
+						rooted := clone_table(source)
 						rooted.path = root_path(owner, source.path)
-						rooted.generated_inputs = {}
-						for input := (source.generated_inputs ?? {})[...] ? {
+						rooted.generated_inputs = []
+						for input := (source.generated_inputs ?? [])[...] ? {
 							rooted.generated_inputs:add(recurse(input))
 						}
 						lowered.sources:add(rooted)
 					}
 				}
-				lowered.private_include_directories = root_paths(owner, description.private_include_directories ?? {})
-				lowered.public_include_directories = root_paths(owner, description.public_include_directories ?? {})
-				lowered.dependencies = {}
-				for dependency := (description.dependencies ?? {})[...] ? {
+				lowered.private_include_directories = root_paths(owner, description.private_include_directories ?? [])
+				lowered.public_include_directories = root_paths(owner, description.public_include_directories ?? [])
+				lowered.dependencies = []
+				for dependency := (description.dependencies ?? [])[...] ? {
 					lowered.dependencies:add(recurse(dependency))
 				}
 
@@ -409,14 +403,14 @@ project_to_tasks ::= fun(project, options) {
 				else { elf.assert(false, f"c.project_to_tasks: unknown target kind '${kind}'") }
 			}
 
-			generated.[description] = cached
+			generated[description] = cached
 			ret cached
 		}
 
 		targets := {}
-		for pair := project.targets:pairs()[...] ? {
-			elf.assert(elf.is_string(pair[0]), "project target names must be strings")
-			targets.[pair[0]] = lower(pair[1]).task
+		for name := project.targets:keys()[...] ? {
+			elf.assert(elf.is_string(name), "project target names must be strings")
+			targets[name] = lower(project.targets[name]).task
 		}
 
 		default_task := nil

@@ -302,18 +302,47 @@ b32 vcvars_cache_apply(String cache)
 return saw_header;
 }
 
+static b32 capture_vcvars_environment(Arena *arena, String *output, int *exit_code)
+{
+	u64 mark = arena_mark(arena);
+	FILE *process = _popen("call vcvars64 >nul&&set", "r");
+	if (!process) return false;
+	b32 success = true;
+	b32 store_output = true;
+	char buffer[4096];
+	for (;;)
+	{
+		size_t size = fread(buffer, 1, sizeof(buffer), process);
+		if (size && store_output && !arena_push_copy(arena, size, buffer))
+		{
+			success = false;
+			store_output = false;
+		}
+		if (size != sizeof(buffer))
+		{
+			success = feof(process) != 0;
+			break;
+		}
+	}
+	*exit_code = _pclose(process);
+	if (!success || *exit_code == -1)
+	{
+		arena_restore(arena, mark);
+		return false;
+	}
+	*output = string_from_data((char *)arena->data + mark, arena->used - mark);
+	return true;
+}
+
 b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 {
-
-	static const String command = LIT("cmd.exe /d /s /c \"call vcvars64 >nul&&set\"");
-
 	Env_Table before = {0};
 	Env_Table after = {0};
 	Env_Diff_Table diff = {0};
 	dy_Env_Table environment;
 	String after_capture;
 	String cache;
-	Manny_Platform_Process_Result process;
+	int process_exit_code;
 	b32 success = false;
 
 	String path;
@@ -336,15 +365,14 @@ b32 vcvars_cache_refresh(Arena *arena, String *result_path)
 	before.items = environment.items;
 	before.count = environment.count;
 	before.capacity = environment.count;
-	if (!manny_platform_run_command(command, arena, (Manny_Platform_Process_Options){ .hide_window = true }, &process)) {
-		log_error("unable to run vcvars64 (error %u)", process.error_code);
+	if (!capture_vcvars_environment(arena, &after_capture, &process_exit_code)) {
+		log_error("unable to run vcvars64");
 		goto cleanup;
 	}
-	if (process.exit_code != 0) {
-		log_error("vcvars64 failed with exit code %u", process.exit_code);
+	if (process_exit_code != 0) {
+		log_error("vcvars64 failed with exit code %d", process_exit_code);
 		goto cleanup;
 	}
-	after_capture = process.output;
 	if (!parse_environment_table(arena, string_split_lines(arena, after_capture), &after))
 	{
 		log_error("unable to parse the environment produced by vcvars64");

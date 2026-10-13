@@ -35,7 +35,7 @@ b32 manny_platform_local_app_data(Arena *arena, String *result);
 b32 manny_platform_get_environment(String name, Arena *arena, String *value);
 b32 manny_platform_set_environment(String name, String value);
 b32 manny_platform_executable_resolves(String string);
-b32 manny_platform_run_command(String command_line, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result);
+b32 manny_platform_run_process(String executable, String_Array arguments, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result);
 b32 manny_platform_error_message(u32 error_code, Arena *arena, String *result);
 void manny_platform_enable_console_colors(void);
 b32 manny_platform_console_supports_colors(b32 error_stream);

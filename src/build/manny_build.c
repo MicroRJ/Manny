@@ -38,11 +38,9 @@ struct Manny_Build
 
 typedef struct Build_Task
 {
-	// Copy of the user's command line.
-	String           command_line;
-	// The processed command line, once other options are injected.
-	String           execution_command_line;
-	// Derived compiler metadata from the command line.
+	String           executable;
+	String_Array     arguments;
+	String_Array     execution_arguments;
 	Compiler_Command compiler;
 
 	Manny_Path_Array   inputs;
@@ -366,7 +364,7 @@ static void run_command(Manny_Node_Context *context, Manny_Build *build, const B
 		dy_remove_file(dependency_file);
 	}
 
-	manny_platform_run_command(task->execution_command_line, context->arena,
+	manny_platform_run_process(task->executable, task->execution_arguments, context->arena,
 		(Manny_Platform_Process_Options){
 			.working_directory = execution_directory,
 			.capture_stderr = true,
@@ -471,7 +469,6 @@ static void report_explanation(const Manny_Build_Completion *completion)
 static void report_completion(const Manny_Build_Completion *completion, u32 completed, u32 total)
 {
 	const Build_Task *build_task = completion->task;
-	String command_line = build_task->command_line;
 	b32 succeeded = !completion->decision.rebuild ||
 		(completion->process.error_code == 0 && completion->process.exit_code == 0);
 	char tag[64];
@@ -479,7 +476,7 @@ static void report_completion(const Manny_Build_Completion *completion, u32 comp
 	if (!completion->decision.rebuild) {
 		snprintf(tag, sizeof(tag), "%u/%u up-to-date", completed, total);
 		logger_log_at(0, LOG_LEVEL_INFO, tag, "%s", manny_task_name(completion->node));
-		logger_log_at(1, LOG_LEVEL_TRACE, "command", "%s", command_line.data);
+		logger_log_at(1, LOG_LEVEL_TRACE, "executable", "%s", build_task->executable.data);
 		return;
 	}
 	if (completion->process.output.size > 0) {
@@ -491,14 +488,14 @@ static void report_completion(const Manny_Build_Completion *completion, u32 comp
 	snprintf(tag, sizeof(tag), "%u/%u %s", completed, total, succeeded ? "succeeded" : "failed");
 	logger_log_at(0, succeeded ? LOG_LEVEL_SUCCESS : LOG_LEVEL_ERROR, tag, "%s", manny_task_name(completion->node));
 	if (succeeded) {
-		logger_log_at(1, LOG_LEVEL_TRACE, "command", "%s", command_line.data);
+		logger_log_at(1, LOG_LEVEL_TRACE, "executable", "%s", build_task->executable.data);
 		logger_log_at(1, LOG_LEVEL_TRACE, "exit-code", "0");
 	}
 	if (completion->process.error_code != 0) {
 		Scratch scratch = begin_scratch();
 		logger_log(LOG_LEVEL_ERROR, manny_task_name(completion->node), "%s",
 			completion->process.launched ? "process error" : "failed to start process");
-		logger_log_at(1, LOG_LEVEL_ERROR, "command", "%s", command_line.data);
+		logger_log_at(1, LOG_LEVEL_ERROR, "executable", "%s", build_task->executable.data);
 		{
 			String message;
 			if (manny_platform_error_message(completion->process.error_code,
@@ -509,13 +506,13 @@ static void report_completion(const Manny_Build_Completion *completion, u32 comp
 			else logger_log(LOG_LEVEL_ERROR, "os", "error %u",
 				completion->process.error_code);
 		}
-		if (build_task->compiler.executable.data) {
+		if (build_task->executable.data) {
 			logger_log(LOG_LEVEL_ERROR, "executable", "%s (%s)",
-				build_task->compiler.executable.data,
-				manny_platform_executable_resolves(build_task->compiler.executable) ?
+				build_task->executable.data,
+				manny_platform_executable_resolves(build_task->executable) ?
 				"found" : "not found in current directory or PATH");
 		}
-		else logger_log(LOG_LEVEL_ERROR, "executable", "unable to parse from command");
+		else logger_log(LOG_LEVEL_ERROR, "executable", "missing executable");
 		String execution_directory = manny_path_string(completion->build, build_task->execution_directory);
 		logger_log(LOG_LEVEL_ERROR, "working-directory", "%s", execution_directory.data);
 		end_scratch(scratch);
@@ -523,7 +520,7 @@ static void report_completion(const Manny_Build_Completion *completion, u32 comp
 	else if (completion->process.exit_code != 0) {
 		logger_log(LOG_LEVEL_ERROR, manny_task_name(completion->node),
 			"process exited with code %u", completion->process.exit_code);
-		logger_log_at(1, LOG_LEVEL_ERROR, "command", "%s", command_line.data);
+		logger_log_at(1, LOG_LEVEL_ERROR, "executable", "%s", build_task->executable.data);
 	}
 }
 
@@ -580,7 +577,9 @@ static void build_task_event(Manny_Event event, void *user_data)
 
 static b32 valid_task(const Build_Task *task)
 {
-	return task && task->command_line.data && task->execution_command_line.data &&
+	return task && task->executable.data &&
+		(!task->arguments.count || task->arguments.items) &&
+		(!task->execution_arguments.count || task->execution_arguments.items) &&
 		manny_path_is_valid(task->execution_directory) &&
 		(!task->inputs.count || task->inputs.items) &&
 		(!task->outputs.count || task->outputs.items) &&
@@ -736,7 +735,11 @@ static b32 build_task_fingerprint(const Manny_Build *build, const Build_Task *ta
 	blake3_hasher_init(&hasher);
 	blake3_hasher_update(&hasher, domain, sizeof(domain) - 1);
 	fingerprint_u32(&hasher, 1);
-	if (!fingerprint_string(&hasher, task->command_line)) return false;
+	if (!fingerprint_string(&hasher, task->executable)) return false;
+	fingerprint_u32(&hasher, task->arguments.count);
+	for (u32 index = 0; index < task->arguments.count; ++index) {
+		if (!fingerprint_string(&hasher, task->arguments.items[index])) return false;
+	}
 	if (!fingerprint_string(&hasher, manny_path_string(build, task->execution_directory))) return false;
 	if (!fingerprint_paths(build, &hasher, task->inputs)) return false;
 	if (!fingerprint_paths(build, &hasher, task->outputs)) return false;
@@ -746,11 +749,23 @@ static b32 build_task_fingerprint(const Manny_Build *build, const Build_Task *ta
 	return true;
 }
 
-static b32 copy_optional_string(Manny *manny, String source, String *result)
+static b32 copy_string_array(Manny *manny, String_Array source, String_Array *result)
 {
-	if (!source.data) return source.size == 0;
-	*result = manny_copy_string(manny, source);
-	return result->data != NULL;
+	*result = (String_Array){0};
+	if (source.count == 0) return true;
+	if (!source.items) return false;
+	result->items = manny_allocate(manny, (u64)source.count * sizeof(*result->items), _Alignof(String));
+	if (!result->items) return false;
+	for (u32 index = 0; index < source.count; ++index) {
+		String item = source.items[index];
+		if (!item.data && item.size != 0) return false;
+		if (item.data) {
+			item = manny_copy_string(manny, item);
+			if (!item.data) return false;
+		}
+		result->items[result->count++] = item;
+	}
+	return true;
 }
 
 static b32 resolve_task_paths(Manny_Build *build, Manny_Path directory, String_Array source, Manny_Path_Array *result)
@@ -774,11 +789,12 @@ static Build_Task *create_build_task(Manny_Build *build, Manny_Task_Desc desc)
 	Scratch scratch;
 	Compiler_Command compiler;
 	b32 valid = false;
-	if (!task || !desc.command_line.data) return NULL;
+	if (!task || !desc.executable.data || desc.executable.size == 0) return NULL;
 	if (desc.working_directory.data && desc.working_directory.size == 0) return NULL;
-	task->command_line = manny_copy_string(manny, desc.command_line);
+	*task = (Build_Task){0};
+	task->executable = manny_copy_string(manny, desc.executable);
 	task->transparent = desc.transparent;
-	if (!task->command_line.data) return NULL;
+	if (!task->executable.data || !copy_string_array(manny, desc.arguments, &task->arguments)) return NULL;
 
 	scratch = begin_scratch();
 	task->execution_directory = manny_build_root(build);
@@ -786,27 +802,22 @@ static Build_Task *create_build_task(Manny_Build *build, Manny_Task_Desc desc)
 	if (!resolve_task_paths(build, task->execution_directory, desc.inputs, &task->inputs) ||
 		!resolve_task_paths(build, task->execution_directory, desc.outputs, &task->outputs) ||
 		!resolve_task_paths(build, task->execution_directory, desc.include_directories, &task->include_directories)) goto done;
-	if (!compiler_command_parse(scratch.arena, task->command_line, &compiler)) {
+	if (!compiler_command_analyze(task->executable, task->arguments, &compiler)) {
 		goto done;
 	}
 	task->compiler = compiler;
-	task->compiler.executable = (String){0};
-	if (!copy_optional_string(manny, compiler.executable, &task->compiler.executable)) {
-		goto done;
-	}
-	task->execution_command_line = task->command_line;
+	task->execution_arguments = task->arguments;
 	task->tracks_dependencies = task->outputs.count > 0 && task->compiler.can_add_make_dependencies;
 	if (task->tracks_dependencies) {
-		String augmented;
+		String_Array augmented;
 		void *start = arena_top(scratch.arena);
 		arena_append_str(scratch.arena, manny_path_string(build, task->outputs.items[0]));
 		arena_append_text(scratch.arena, ".d.tmp");
 		String dependency_file = arena_string_from(scratch.arena, start);
 		if (!manny_path_resolve(build, task->execution_directory, dependency_file, &task->dependency_file) ||
 			!compiler_command_add_dependencies(scratch.arena, &task->compiler,
-				task->command_line, manny_path_string(build, task->dependency_file), &augmented)) goto done;
-		task->execution_command_line = manny_copy_string(manny, augmented);
-		if (!task->execution_command_line.data) goto done;
+				task->arguments, manny_path_string(build, task->dependency_file), &augmented) ||
+			!copy_string_array(manny, augmented, &task->execution_arguments)) goto done;
 	}
 	if (!build_task_fingerprint(build, task, &task->fingerprint)) goto done;
 	valid = true;

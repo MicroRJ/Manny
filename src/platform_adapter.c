@@ -1,5 +1,8 @@
 #include "platform_adapter.h"
 
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+
 #define MANNY_PLATFORM_ERROR_OUT_OF_MEMORY UINT32_MAX
 
 b32 manny_platform_file_info(String path, Manny_Platform_File_Info *info)
@@ -98,68 +101,150 @@ b32 manny_platform_local_app_data(Arena *arena, String *result)
 	return manny_platform_get_environment(LIT("LOCALAPPDATA"), arena, result) && result->size > 0;
 }
 
-static b32 append_process_pipe(dy_Process *process, Arena *arena, b32 standard_error, u32 *error_code)
+static b32 append_process_pipe(dy_Stream *stream, Arena *arena, u32 *error_code)
 {
 	char buffer[4096];
-	u64 size;
-	b32 end_of_stream;
-	dy_Result read = dy_read_process(process, standard_error ? DY_PROCESS_ERROR : DY_PROCESS_OUTPUT,
-		buffer, sizeof(buffer), &size, &end_of_stream);
-	(void)end_of_stream;
-	if (read.error) {
+	u64 size = 0;
+	dy_Result read = dy_stream_read(stream, buffer, sizeof(buffer), DY_STREAM_READ_AVAILABLE, &size);
+	if (read.error == DY_ERROR_WOULD_BLOCK || read.error == DY_ERROR_END_OF_STREAM)
+	{
+		return false;
+	}
+	if (read.error)
+	{
 		*error_code = read.os_error ? read.os_error : (u32)read.error;
 		return false;
 	}
-	if (size && !arena_push_copy(arena, size, buffer)) {
+	if (size && !arena_push_copy(arena, size, buffer))
+	{
 		*error_code = MANNY_PLATFORM_ERROR_OUT_OF_MEMORY;
 		return false;
 	}
 	return size != 0;
 }
 
-b32 manny_platform_run_command(String command_line, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result)
+static b32 resolve_process_executable(Arena *arena, String executable, String *result)
 {
+	const u64 capacity = 32768;
+	char *name = str_push_copy(arena, executable).data;
+	char *path = arena_push(arena, capacity);
+	if (!name || !path) return false;
+	DWORD size = SearchPathA(NULL, name, ".exe", (DWORD)capacity, path, NULL);
+	if (size == 0 || size >= capacity) return false;
+	*result = string_from_data(path, size);
+	return true;
+}
+
+b32 manny_platform_run_process(String executable, String_Array arguments, Arena *arena, Manny_Platform_Process_Options options, Manny_Platform_Process_Result *result)
+{
+	Scratch scratch;
+	String executable_path;
 	u64 mark;
-	dy_Process process;
+	dy_Process process = {0};
+	dy_Pipe output_pipe = {0};
+	dy_Pipe error_pipe = {0};
 	dy_Result status;
-	b32 completed;
-	u32 exit_code;
-	if (!arena || !result) return false;
-	mark = arena_mark(arena);
-	*result = (Manny_Platform_Process_Result){ .exit_code = UINT32_MAX };
-	status = dy_start_process(command_line, (dy_Process_Options){
-		.working_directory = options.working_directory,
-		.capture_output = true,
-		.capture_error = options.capture_stderr,
-		.hide_window = options.hide_window,
-	}, &process);
-	if (status.error) {
-		result->error_code = status.os_error ? status.os_error : (u32)status.error;
+	dy_Process_Status process_status = DY_PROCESS_RUNNING;
+	u32 exit_code = UINT32_MAX;
+	if (!arena || !result)
+	{
 		return false;
 	}
-	result->launched = true;
-	for (;;) {
-		while (append_process_pipe(&process, arena, false, &result->error_code)) {}
-		if (options.capture_stderr) while (append_process_pipe(&process, arena, true, &result->error_code)) {}
-		if (result->error_code) goto failure;
-		status = dy_wait_process(process, 1, &completed, &exit_code);
-		if (status.error) {
+	scratch = begin_different_scratch(arena);
+	if (!resolve_process_executable(scratch.arena, executable, &executable_path))
+	{
+		end_scratch(scratch);
+		*result = (Manny_Platform_Process_Result){ .exit_code = UINT32_MAX, .error_code = ERROR_FILE_NOT_FOUND };
+		return false;
+	}
+	mark = arena_mark(arena);
+	*result = (Manny_Platform_Process_Result){ .exit_code = UINT32_MAX };
+	status = dy_pipe_create(&output_pipe);
+	if (status.error)
+	{
+		result->error_code = status.os_error ? status.os_error : (u32)status.error;
+		goto failure;
+	}
+	if (options.capture_stderr)
+	{
+		status = dy_pipe_create(&error_pipe);
+		if (status.error)
+		{
 			result->error_code = status.os_error ? status.os_error : (u32)status.error;
 			goto failure;
 		}
-		if (completed) break;
 	}
-	while (append_process_pipe(&process, arena, false, &result->error_code)) {}
-	if (options.capture_stderr) while (append_process_pipe(&process, arena, true, &result->error_code)) {}
-	if (result->error_code) goto failure;
+	status = dy_process_start((dy_Process_Start_Options){
+		.executable = executable_path,
+		.arguments = arguments,
+		.working_directory = options.working_directory,
+		.standard_output = output_pipe.writer,
+		.standard_error = error_pipe.writer,
+		.hide_window = options.hide_window,
+	}, &process);
+	end_scratch(scratch);
+	scratch = (Scratch){0};
+	dy_stream_close(output_pipe.writer);
+	output_pipe.writer = NULL;
+	if (error_pipe.writer)
+	{
+		dy_stream_close(error_pipe.writer);
+		error_pipe.writer = NULL;
+	}
+	if (status.error)
+	{
+		result->error_code = status.os_error ? status.os_error : (u32)status.error;
+		goto failure;
+	}
+	result->launched = true;
+	while (process_status == DY_PROCESS_RUNNING)
+	{
+		while (append_process_pipe(output_pipe.reader, arena, &result->error_code))
+		{
+		}
+		if (options.capture_stderr)
+		{
+			while (append_process_pipe(error_pipe.reader, arena, &result->error_code))
+			{
+			}
+		}
+		if (result->error_code)
+		{
+			goto failure;
+		}
+		status = dy_process_wait(process, 1, &process_status, &exit_code);
+		if (status.error)
+		{
+			result->error_code = status.os_error ? status.os_error : (u32)status.error;
+			goto failure;
+		}
+	}
+	while (append_process_pipe(output_pipe.reader, arena, &result->error_code))
+	{
+	}
+	if (options.capture_stderr)
+	{
+		while (append_process_pipe(error_pipe.reader, arena, &result->error_code))
+		{
+		}
+	}
+	if (result->error_code)
+	{
+		goto failure;
+	}
 	result->exit_code = exit_code;
 	result->output.data = (char *)arena->data + mark;
 	result->output.size = arena->used - mark;
-	dy_close_process(&process);
+	dy_process_close(&process);
+	dy_pipe_close(&output_pipe);
+	dy_pipe_close(&error_pipe);
 	return true;
 
 failure:
-	dy_close_process(&process);
+	if (scratch.arena) end_scratch(scratch);
+	dy_process_close(&process);
+	dy_pipe_close(&output_pipe);
+	dy_pipe_close(&error_pipe);
 	arena_restore(arena, mark);
 	result->output = (String){0};
 	return false;

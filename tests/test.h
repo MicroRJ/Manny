@@ -28,6 +28,10 @@
 
 #define CHECK_OK(expression) CHECK((expression) == MANNY_OK)
 #define STRING_ARRAY_FROM(array) ((String_Array){ .items = (array), .count = ARRAY_COUNT(array) })
+#define STRING_ARRAY(...) ((String_Array){ \
+	.items = (String[]){ __VA_ARGS__ }, \
+	.count = ARRAY_COUNT(((String[]){ __VA_ARGS__ })), \
+})
 
 typedef struct Manny_Test
 {

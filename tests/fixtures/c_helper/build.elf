@@ -1,7 +1,7 @@
 codegen := {
 	kind = "executable",
 	name = "codegen",
-	sources = { "codegen.c" },
+	sources = [ "codegen.c" ],
 }
 
 generated := {
@@ -10,34 +10,34 @@ generated := {
 	program = codegen,
 	output = "generated/value.h",
 	arguments = fun(output) {
-		ret { output }
+		ret [ output ]
 	},
 }
 
 fixture := {
 	kind = "static_library",
 	name = "fixture",
-	sources = {
+	sources = [
 		{
 			path = "fixture.c",
-			generated_inputs = { generated },
+			generated_inputs = [ generated ],
 		},
-	},
-	public_include_directories = { "include" },
+	],
+	public_include_directories = [ "include" ],
 }
 
 app := {
 	kind = "executable",
 	name = "fixture_app",
-	sources = { "main.c" },
-	dependencies = { fixture },
+	sources = [ "main.c" ],
+	dependencies = [ fixture ],
 }
 
 tests := {
 	kind = "test",
 	name = "fixture_tests",
-	sources = { "fixture_test.c" },
-	dependencies = { fixture },
+	sources = [ "fixture_test.c" ],
+	dependencies = [ fixture ],
 }
 
 project := {
@@ -53,10 +53,10 @@ project := {
 }
 
 tasks := manny.load("c").project_to_tasks(project, {
-	compile_options = { "/W4", "/WX" },
+	compile_options = [ "/W4", "/WX" ],
 })
 
 entries := {}
-entries.build = fun() ret manny.build({ targets = { tasks.default_task } })
-entries.test = fun() ret manny.build({ targets = { tasks.targets.tests } })
+entries.build = fun() ret manny.build({ targets = [ tasks.default_task ] })
+entries.test = fun() ret manny.build({ targets = [ tasks.targets.tests ] })
 ret entries

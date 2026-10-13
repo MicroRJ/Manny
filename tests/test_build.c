@@ -6,6 +6,14 @@ static b32 get_test_executable(char *buffer, u32 buffer_size)
     return length > 0 && length < buffer_size;
 }
 
+static b32 set_self_task(Manny_Task_Desc *task, char *executable, String_Array arguments)
+{
+	if (!get_test_executable(executable, MAX_PATH)) return false;
+	task->executable = string_from_cstring(executable);
+	task->arguments = arguments;
+	return true;
+}
+
 static b32 test_builder_runs_in_parallel(void)
 {
     Manny_Build *build = manny_build_create();
@@ -15,9 +23,6 @@ static b32 test_builder_runs_in_parallel(void)
     Manny_Node *link = test_add_node(graph, "link");
     Manny_Task_Desc tasks[3] = {0};
     char executable[MAX_PATH];
-    char command_a[2 * MAX_PATH];
-    char command_b[2 * MAX_PATH];
-    char command_link[2 * MAX_PATH];
     char event_a_name[128];
     char event_b_name[128];
     HANDLE event_a;
@@ -33,13 +38,12 @@ static b32 test_builder_runs_in_parallel(void)
     event_b = CreateEventA(NULL, TRUE, FALSE, event_b_name);
     CHECK(event_a != NULL && event_b != NULL);
 
-    CHECK(snprintf(command_a, sizeof(command_a), "\"%s\" --barrier %s %s a", executable, event_a_name, event_b_name) > 0);
-    CHECK(snprintf(command_b, sizeof(command_b), "\"%s\" --barrier %s %s b", executable, event_b_name, event_a_name) > 0);
-    CHECK(snprintf(command_link, sizeof(command_link), "\"%s\" --child 0 0 link", executable) > 0);
-
-    tasks[0].command_line = string_from_cstring(command_a);
-    tasks[1].command_line = string_from_cstring(command_b);
-    tasks[2].command_line = string_from_cstring(command_link);
+	tasks[0].executable = string_from_cstring(executable);
+	tasks[0].arguments = STRING_ARRAY(LIT("--barrier"), string_from_cstring(event_a_name), string_from_cstring(event_b_name), LIT("a"));
+	tasks[1].executable = string_from_cstring(executable);
+	tasks[1].arguments = STRING_ARRAY(LIT("--barrier"), string_from_cstring(event_b_name), string_from_cstring(event_a_name), LIT("b"));
+	tasks[2].executable = string_from_cstring(executable);
+	tasks[2].arguments = STRING_ARRAY(LIT("--child"), LIT("0"), LIT("0"), LIT("link"));
 
     CHECK_OK(manny_add_dependency(graph, link, a));
     CHECK_OK(manny_add_dependency(graph, link, b));
@@ -87,11 +91,10 @@ static b32 test_builder_events(void)
 		.valid = true,
 	};
 	char executable[MAX_PATH];
-	char command[2 * MAX_PATH];
 
 	CHECK(get_test_executable(executable, sizeof(executable)));
-	CHECK(snprintf(command, sizeof(command), "\"%s\" --child 0 0 event", executable) > 0);
-	task.command_line = string_from_cstring(command);
+	task.executable = string_from_cstring(executable);
+	task.arguments = STRING_ARRAY(LIT("--child"), LIT("0"), LIT("0"), LIT("event"));
 	CHECK_OK(manny_set_task(build, node, task));
 	CHECK(manny_build(build, (Manny_Build_Params){
 		.worker_count = 1,
@@ -113,18 +116,14 @@ static b32 test_builder_propagates_failure(void)
     Manny_Node *independent = test_add_node(graph, "independent");
     Manny_Task_Desc tasks[3] = {0};
     char executable[MAX_PATH];
-    char fail_command[2 * MAX_PATH];
-    char blocked_command[2 * MAX_PATH];
-    char independent_command[2 * MAX_PATH];
 
     CHECK(get_test_executable(executable, sizeof(executable)));
-    CHECK(snprintf(fail_command, sizeof(fail_command), "\"%s\" --child 0 1 fail", executable) > 0);
-    CHECK(snprintf(blocked_command, sizeof(blocked_command), "\"%s\" --child 0 0 blocked", executable) > 0);
-    CHECK(snprintf(independent_command, sizeof(independent_command), "\"%s\" --child 0 0 independent", executable) > 0);
-
-    tasks[0].command_line = string_from_cstring(fail_command);
-    tasks[1].command_line = string_from_cstring(blocked_command);
-    tasks[2].command_line = string_from_cstring(independent_command);
+	tasks[0].executable = string_from_cstring(executable);
+	tasks[0].arguments = STRING_ARRAY(LIT("--child"), LIT("0"), LIT("1"), LIT("fail"));
+	tasks[1].executable = string_from_cstring(executable);
+	tasks[1].arguments = STRING_ARRAY(LIT("--child"), LIT("0"), LIT("0"), LIT("blocked"));
+	tasks[2].executable = string_from_cstring(executable);
+	tasks[2].arguments = STRING_ARRAY(LIT("--child"), LIT("0"), LIT("0"), LIT("independent"));
     CHECK_OK(manny_add_dependency(graph, blocked, fail));
 
     CHECK(!test_run_tasks(build, tasks, 3, 2));
@@ -142,7 +141,8 @@ static b32 test_builder_reports_missing_executable(void)
     Manny *graph = manny_build_graph(build);
     Manny_Node *missing = test_add_node(graph, "missing executable");
     Manny_Task_Desc task = {
-        .command_line = LIT("manny_executable_that_does_not_exist_7f31.exe --input x.c")
+		.executable = LIT("manny_executable_that_does_not_exist_7f31.exe"),
+		.arguments = STRING_ARRAY(LIT("--input"), LIT("x.c")),
     };
 
     CHECK(!test_run_tasks(build, &task, 1, 1));
@@ -161,9 +161,11 @@ static b32 test_builder_skips_existing_output(void)
     Manny *second_graph;
     Manny_Task_Desc task = {0};
     Manny_Platform_File_Info info;
+	char executable[MAX_PATH];
 
     DeleteFileA(output_path);
-    task.command_line = LIT("cmd /c echo built>build\\incremental_test.out");
+	CHECK(set_self_task(&task, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\incremental_test.out"), LIT("built"))));
     task.outputs = STRING_ARRAY_FROM(outputs);
 
     first_build = manny_build_create();
@@ -192,14 +194,13 @@ static b32 test_directory_output_stays_clean(void)
 	String child_outputs[] = { LIT("build/directory_output_test/child.txt") };
 	Manny_Task_Desc tasks[2] = {
 		{
-			.command_line = LIT("cmd /c if not exist build\\directory_output_test mkdir build\\directory_output_test"),
 			.outputs = STRING_ARRAY_FROM(directory_outputs),
 		},
 		{
-			.command_line = LIT("cmd /c echo child>build\\directory_output_test\\child.txt"),
 			.outputs = STRING_ARRAY_FROM(child_outputs),
 		},
 	};
+	char executable[MAX_PATH];
 	Manny_Platform_File_Info before;
 	Manny_Platform_File_Info after;
 	Manny_Build *build;
@@ -208,6 +209,10 @@ static b32 test_directory_output_stays_clean(void)
 	Manny_Node *write_child;
 
 	CHECK(!dy_remove_tree(string_from_cstring(directory)).error);
+	CHECK(set_self_task(tasks + 0, executable,
+		STRING_ARRAY(LIT("--mkdir"), LIT("build\\directory_output_test"))));
+	CHECK(set_self_task(tasks + 1, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\directory_output_test\\child.txt"), LIT("child"))));
 	build = manny_build_create();
 	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
@@ -240,10 +245,10 @@ static b32 test_task_fingerprint_rebuilds(void)
 	String first_includes[] = { LIT("include/first") };
 	String second_includes[] = { LIT("include/second") };
 	Manny_Task_Desc task = {
-		.command_line = LIT("cmd /c echo first>build\\fingerprint_test.out"),
 		.outputs = STRING_ARRAY_FROM(outputs),
 		.include_directories = STRING_ARRAY_FROM(first_includes),
 	};
+	char executable[MAX_PATH];
 	Manny_Platform_File_Info first;
 	Manny_Platform_File_Info unchanged;
 	Manny_Platform_File_Info command_changed;
@@ -252,6 +257,8 @@ static b32 test_task_fingerprint_rebuilds(void)
 	Manny *graph;
 
 	CHECK(!dy_remove_file(string_from_cstring(output_path)).error);
+	CHECK(set_self_task(&task, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\fingerprint_test.out"), LIT("first"))));
 	build = manny_build_create();
 	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
@@ -271,7 +278,7 @@ static b32 test_task_fingerprint_rebuilds(void)
 	CHECK(unchanged.modified_unix_ms == first.modified_unix_ms);
 
 	Sleep(20);
-	task.command_line = LIT("cmd /c echo second>build\\fingerprint_test.out");
+	task.arguments = STRING_ARRAY(LIT("--write"), LIT("build\\fingerprint_test.out"), LIT("second"));
 	build = manny_build_create();
 	graph = manny_build_graph(build);
 	CHECK(graph != NULL);
@@ -325,10 +332,12 @@ static b32 test_newer_input_rebuilds(void)
 	Manny *clean_graph;
 	Manny *dirty_graph;
 	Manny_Platform_File_Info output_info;
+	char executable[MAX_PATH];
 
 	CHECK(write_test_file_at_time(input_path, 0ULL));
 	CHECK(!dy_remove_file(string_from_cstring(output_path)).error);
-	task.command_line = LIT("cmd /c echo rebuilt>build\\newer_input_test.out");
+	CHECK(set_self_task(&task, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\newer_input_test.out"), LIT("rebuilt"))));
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
 
@@ -364,13 +373,18 @@ static b32 test_multiple_inputs_and_outputs(void)
     Manny_Build *build;
     Manny *graph;
     Manny_Platform_File_Info info;
+	char executable[MAX_PATH];
 
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(input_a, 100ULL));
     CHECK(write_test_file_at_time(input_b, 150ULL));
 	CHECK(!dy_remove_file(string_from_cstring(output_a)).error);
 	CHECK(!dy_remove_file(string_from_cstring(output_b)).error);
-	task.command_line = LIT("cmd /c echo a>build\\multi_a.out && echo b>build\\multi_b.out && echo rebuilt>build\\multi.marker");
+	CHECK(set_self_task(&task, executable, STRING_ARRAY(
+		LIT("--write-many"),
+		LIT("build\\multi_a.out"), LIT("a"),
+		LIT("build\\multi_b.out"), LIT("b"),
+		LIT("build\\multi.marker"), LIT("rebuilt"))));
     task.inputs = STRING_ARRAY_FROM(inputs);
     task.outputs = STRING_ARRAY_FROM(outputs);
 
@@ -430,16 +444,21 @@ static b32 test_dependency_rebuild_propagates(void)
     Manny_Node *dependency;
     Manny_Node *parent;
     Manny_Platform_File_Info info;
+	char executable[MAX_PATH];
 
     DeleteFileA(marker);
     CHECK(write_test_file_at_time(dependency_input, 100ULL));
 	CHECK(!dy_remove_file(string_from_cstring(dependency_output)).error);
 	CHECK(!dy_remove_file(string_from_cstring(parent_output)).error);
 
-	tasks[0].command_line = LIT("cmd /c echo dependency>build\\dependency.out");
+	CHECK(set_self_task(tasks + 0, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\dependency.out"), LIT("dependency"))));
     tasks[0].inputs = STRING_ARRAY_FROM(dependency_inputs);
     tasks[0].outputs = STRING_ARRAY_FROM(dependency_outputs);
-	tasks[1].command_line = LIT("cmd /c echo parent>build\\parent.out && echo rebuilt>build\\parent.marker");
+	CHECK(set_self_task(tasks + 1, executable, STRING_ARRAY(
+		LIT("--write-many"),
+		LIT("build\\parent.out"), LIT("parent"),
+		LIT("build\\parent.marker"), LIT("rebuilt"))));
     tasks[1].outputs = STRING_ARRAY_FROM(parent_outputs);
 
 	build = manny_build_create();
@@ -474,10 +493,13 @@ static b32 test_transparent_dependency(void)
 	const char *parent_output = "build\\transparent_parent.out";
 	String parent_outputs[] = { string_from_cstring(parent_output) };
 	Manny_Task_Desc tasks[2] = {0};
+	char executable[MAX_PATH];
 	CHECK(!dy_remove_file(string_from_cstring(parent_output)).error);
-	tasks[0].command_line = LIT("cmd /c exit /b 0");
+	CHECK(set_self_task(tasks + 0, executable,
+		STRING_ARRAY(LIT("--child"), LIT("0"), LIT("0"), LIT("transparent"))));
 	tasks[0].transparent = true;
-	tasks[1].command_line = LIT("cmd /c echo parent>build\\transparent_parent.out");
+	CHECK(set_self_task(tasks + 1, executable,
+		STRING_ARRAY(LIT("--write"), LIT("build\\transparent_parent.out"), LIT("parent"))));
 	tasks[1].outputs = STRING_ARRAY_FROM(parent_outputs);
 	Manny_Build *build = manny_build_create();
 	Manny *graph = manny_build_graph(build);
@@ -511,16 +533,18 @@ static b32 test_task_working_directory(void)
 	const char *unresolved_output = "result.out";
 	String outputs[] = { LIT("result.out") };
 	Manny_Task_Desc task = {
-		.command_line = LIT("cmd /c echo built>result.out"),
 		.working_directory = LIT("build\\task_working_directory"),
 		.outputs = STRING_ARRAY_FROM(outputs),
 	};
+	char executable[MAX_PATH];
 	Manny_Build *build;
 	Manny *graph;
 	Manny_Platform_File_Info info;
 
 	DeleteFileA(resolved_output);
 	DeleteFileA(unresolved_output);
+	CHECK(set_self_task(&task, executable,
+		STRING_ARRAY(LIT("--write"), LIT("result.out"), LIT("built"))));
 	if (!CreateDirectoryA(directory, NULL) &&
 		GetLastError() != ERROR_ALREADY_EXISTS) return false;
 	build = manny_build_create();
@@ -542,9 +566,31 @@ static b32 test_task_working_directory(void)
 	return true;
 }
 
+static b32 write_child_file(const char *path, const char *text)
+{
+	HANDLE file = CreateFileA(path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if (file == INVALID_HANDLE_VALUE) return false;
+	size_t size = strlen(text);
+	DWORD written = 0;
+	b32 success = size <= UINT32_MAX && WriteFile(file, text, (DWORD)size, &written, NULL) && written == size;
+	CloseHandle(file);
+	return success;
+}
 
 int main(int argument_count, char **arguments)
 {
+	if (argument_count == 4 && strcmp(arguments[1], "--write") == 0) {
+		return write_child_file(arguments[2], arguments[3]) ? 0 : 1;
+	}
+	if (argument_count >= 4 && strcmp(arguments[1], "--write-many") == 0 && (argument_count - 2) % 2 == 0) {
+		for (int index = 2; index < argument_count; index += 2) {
+			if (!write_child_file(arguments[index], arguments[index + 1])) return 1;
+		}
+		return 0;
+	}
+	if (argument_count == 3 && strcmp(arguments[1], "--mkdir") == 0) {
+		return CreateDirectoryA(arguments[2], NULL) || GetLastError() == ERROR_ALREADY_EXISTS ? 0 : 1;
+	}
 	if (argument_count == 5 && strcmp(arguments[1], "--child") == 0) {
 		DWORD delay = (DWORD)strtoul(arguments[2], NULL, 10);
 		int exit_code = atoi(arguments[3]);

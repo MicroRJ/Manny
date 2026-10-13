@@ -124,7 +124,8 @@ static b32 test_compiler_dependency_state(void)
 	String inputs[] = { LIT("source.c") };
 	String outputs[] = { LIT("object.obj") };
 	Manny_Task_Desc task = {
-		.command_line = LIT("clang-cl /nologo /c source.c /Foobject.obj"),
+		.executable = LIT("clang-cl"),
+		.arguments = STRING_ARRAY(LIT("/nologo"), LIT("/c"), LIT("source.c"), LIT("/Foobject.obj")),
 		.working_directory = LIT("work"),
 		.inputs = STRING_ARRAY_FROM(inputs),
 		.outputs = STRING_ARRAY_FROM(outputs),
@@ -229,42 +230,40 @@ static b32 test_compiler_command(void)
 {
 	Arena arena = arena_create(KILOBYTES(64));
 	Compiler_Command command;
-	String augmented;
-	CHECK(compiler_command_parse(&arena, LIT("   "), &command));
-	CHECK(!command.executable.data && command.kind == COMPILER_KIND_UNKNOWN);
-	CHECK(compiler_command_parse(&arena, LIT("/c source.c"), &command));
+	String_Array augmented;
+	CHECK(compiler_command_analyze(LIT("/c"), STRING_ARRAY(LIT("source.c")), &command));
 	CHECK(string_equal(command.executable, LIT("/c")) && !command.compiles);
-	CHECK(compiler_command_parse(&arena, LIT("clang-cl /Ione /I \"two words\" -Ithree -I four -isystem system"), &command));
+	CHECK(compiler_command_analyze(LIT("clang-cl"),
+		STRING_ARRAY(LIT("/Ione"), LIT("/I"), LIT("two words"), LIT("-Ithree"), LIT("-I"), LIT("four"), LIT("-isystem"), LIT("system")), &command));
 	CHECK(command.kind == COMPILER_KIND_CLANG_CL);
 	CHECK(!command.compiles);
-	CHECK(compiler_command_parse(&arena,
-		LIT("\"C:\\Program Files\\LLVM\\bin\\clang-cl.exe\" /c source.c /Foobject.obj"),
-		&command));
+	String_Array clang_arguments = STRING_ARRAY(LIT("/c"), LIT("source.c"), LIT("/Foobject.obj"));
+	CHECK(compiler_command_analyze(LIT("C:\\Program Files\\LLVM\\bin\\clang-cl.exe"), clang_arguments, &command));
 	CHECK(command.can_add_make_dependencies);
-	CHECK(compiler_command_add_dependencies(&arena, &command,
-		LIT("\"C:\\Program Files\\LLVM\\bin\\clang-cl.exe\" /c source.c /Foobject.obj"),
-		LIT("object.obj.d"), &augmented));
-	CHECK(string_ends_with(augmented, LIT(" /clang:-MD /clang:-MF\"object.obj.d\"")));
-	CHECK(compiler_command_parse(&arena, LIT("cl.exe /nologo /c source.c"), &command));
+	CHECK(compiler_command_add_dependencies(&arena, &command, clang_arguments, LIT("object.obj.d"), &augmented));
+	CHECK(augmented.count == clang_arguments.count + 2);
+	CHECK(string_equal(augmented.items[augmented.count - 2], LIT("/clang:-MD")));
+	CHECK(string_equal(augmented.items[augmented.count - 1], LIT("/clang:-MFobject.obj.d")));
+	String_Array msvc_arguments = STRING_ARRAY(LIT("/nologo"), LIT("/c"), LIT("source.c"));
+	CHECK(compiler_command_analyze(LIT("cl.exe"), msvc_arguments, &command));
 	CHECK(command.kind == COMPILER_KIND_MSVC && command.compiles);
 	CHECK(!command.can_add_make_dependencies);
-	CHECK(compiler_command_add_dependencies(&arena, &command, LIT("cl /c source.c"),
-		LIT("object.json"), &augmented));
-	CHECK(string_ends_with(augmented, LIT(" /sourceDependencies \"object.json\"")));
-	CHECK(compiler_command_parse(&arena, LIT("gcc -MMD -c source.c"), &command));
+	CHECK(compiler_command_add_dependencies(&arena, &command, msvc_arguments, LIT("object.json"), &augmented));
+	CHECK(string_equal(augmented.items[augmented.count - 2], LIT("/sourceDependencies")));
+	CHECK(string_equal(augmented.items[augmented.count - 1], LIT("object.json")));
+	String_Array gcc_arguments = STRING_ARRAY(LIT("-MMD"), LIT("-c"), LIT("source.c"));
+	CHECK(compiler_command_analyze(LIT("gcc"), gcc_arguments, &command));
 	CHECK(command.kind == COMPILER_KIND_GCC && command.compiles && command.generates_dependencies);
 	CHECK(!command.can_add_make_dependencies);
-	CHECK(!compiler_command_add_dependencies(&arena, &command,
-		LIT("gcc -MMD -c source.c"),
-		LIT("object.d"), &augmented));
-	CHECK(compiler_command_parse(&arena,
-		LIT("x86_64-w64-mingw32-gcc -c source.c -o object.o"), &command));
+	CHECK(!compiler_command_add_dependencies(&arena, &command, gcc_arguments, LIT("object.d"), &augmented));
+	CHECK(compiler_command_analyze(LIT("x86_64-w64-mingw32-gcc"),
+		STRING_ARRAY(LIT("-c"), LIT("source.c"), LIT("-o"), LIT("object.o")), &command));
 	CHECK(command.kind == COMPILER_KIND_GCC && command.compiles);
 	CHECK(command.can_add_make_dependencies);
-	CHECK(compiler_command_parse(&arena,
-		LIT("C:\\toolchain\\aarch64-linux-gnu-g++.exe -c source.cpp -o object.o"), &command));
+	CHECK(compiler_command_analyze(LIT("C:\\toolchain\\aarch64-linux-gnu-g++.exe"),
+		STRING_ARRAY(LIT("-c"), LIT("source.cpp"), LIT("-o"), LIT("object.o")), &command));
 	CHECK(command.kind == COMPILER_KIND_GCC && command.compiles);
-	CHECK(compiler_command_parse(&arena, LIT("notgcc -c source.c"), &command));
+	CHECK(compiler_command_analyze(LIT("notgcc"), STRING_ARRAY(LIT("-c"), LIT("source.c")), &command));
 	CHECK(command.kind == COMPILER_KIND_UNKNOWN && command.compiles);
 	arena_destroy(&arena);
 	return true;

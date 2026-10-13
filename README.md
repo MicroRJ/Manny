@@ -26,15 +26,16 @@ elf.fs.create_directories("build")
 
 hello := {
 	name = "hello",
-	command_line = "clang-cl main.c /Febuild/hello.exe",
-	inputs = { "main.c" },
-	outputs = { "build/hello.exe" },
+	exec = "clang-cl",
+	args = [ "main.c", "/Febuild/hello.exe" ],
+	inputs = [ "main.c" ],
+	outputs = [ "build/hello.exe" ],
 }
 
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({ targets = { hello } })
+	ret manny.build({ targets = [ hello ] })
 }
 
 ret entries

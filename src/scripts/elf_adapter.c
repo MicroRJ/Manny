@@ -1,5 +1,4 @@
 #include "elf_adapter.h"
-#include "elf_batteries.h"
 
 #include "manny_build.h"
 #include "elf.h"
@@ -246,14 +245,15 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 		task.name = copy_stack_string(scratch.arena, state, -1);
 		elf_pop(state, 1);
 
-		elf_get_field(state, description, "command_line");
-		task.command_line = copy_stack_string(scratch.arena, state, -1);
+		elf_get_field(state, description, "exec");
+		task.executable = copy_stack_string(scratch.arena, state, -1);
 		elf_pop(state, 1);
 
-		if (!task.name.data || !task.command_line.data) {
-			snprintf(result->error, sizeof(result->error), "task %u requires string fields 'name' and 'command_line'", i);
+		if (!task.name.data || !task.executable.data) {
+			snprintf(result->error, sizeof(result->error), "task %u requires string fields 'name' and 'exec'", i);
 			goto cleanup;
 		}
+		if (!copy_string_array_field(state, scratch.arena, description, "args", task.name, &task.arguments, result->error, sizeof(result->error))) goto cleanup;
 		elf_get_field(state, description, "working_directory");
 		if (!elf_is_nil(state, -1)) {
 			task.working_directory = copy_stack_string(scratch.arena, state, -1);
@@ -448,14 +448,12 @@ b32 elf_script_load(Script *script, String path, String source)
 		return false;
 	}
 	elf_set_user_data(elf->state, script);
-	elf_open_batteries(elf->state);
 	if (!register_manny_library(elf->state)) {
 		script_set_error(script, "unable to register Manny script libraries");
 		return false;
 	}
 
-	if (elf_push_code_source(elf->state, path.data,
-		(elf_StrSlice){ source.data, (elf_u32)source.size }, NULL) != ELF_ERROR_NONE) {
+	if (elf_push_code_source(elf->state, path.data, (elf_StrSlice){ source.data, (elf_u32)source.size }) != ELF_ERROR_NONE) {
 		script_set_error(script, "unable to load '%s'", path.data);
 		return false;
 	}

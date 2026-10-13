@@ -49,57 +49,15 @@ static Compiler_Kind compiler_kind_from_executable(String executable)
 	return COMPILER_KIND_UNKNOWN;
 }
 
-static b32 next_argument(Arena *arena, String command_line, u64 *offset, String *result)
+b32 compiler_command_analyze(String executable, String_Array arguments, Compiler_Command *result)
 {
-	u64 cursor = *offset;
-	while (cursor < command_line.size && (command_line.data[cursor] == ' ' || command_line.data[cursor] == '\t')) ++cursor;
-	if (cursor == command_line.size) {
-		*offset = cursor;
-		return false;
-	}
-
-	void *start = arena_top(arena);
-	b32 quoted = false;
-	while (cursor < command_line.size && (quoted || (command_line.data[cursor] != ' ' && command_line.data[cursor] != '\t')))
-	{
-		char character = command_line.data[cursor++];
-		if (character == '"') quoted = !quoted;
-		else arena_append_char(arena, character);
-	}
-	*result = arena_string_from(arena, start);
-	arena_finalize_string(arena, *result);
-	*offset = cursor;
-	return true;
-}
-
-b32 compiler_command_parse(Arena *arena, String command_line, Compiler_Command *result)
-{
-	if (!arena || !result) return false;
+	if (!result || !executable.data || (arguments.count && !arguments.items)) return false;
 	*result = (Compiler_Command){0};
-	if (!command_line.data) return true;
-
-	Scratch scratch = begin_different_scratch(arena);
-	u64 offset = 0;
-	u64 executable_mark = arena_mark(scratch.arena);
-	String executable;
-	if (!next_argument(scratch.arena, command_line, &offset, &executable)) {
-		end_scratch(scratch);
-		return true;
-	}
-	result->executable = str_push_copy(arena, executable);
-	if (!result->executable.data) {
-		end_scratch(scratch);
-		return false;
-	}
+	result->executable = executable;
 	result->kind = compiler_kind_from_executable(executable);
-	arena_restore(scratch.arena, executable_mark);
-
-	for (;;)
+	for (u32 index = 0; index < arguments.count; ++index)
 	{
-		u64 mark = arena_mark(scratch.arena);
-		String argument;
-		if (!next_argument(scratch.arena, command_line, &offset, &argument)) break;
-
+		String argument = arguments.items[index];
 		if (string_equal_insensitive(argument, LIT("/c")) ||
 			string_equal(argument, LIT("-c"))) {
 			result->compiles = true;
@@ -111,52 +69,57 @@ b32 compiler_command_parse(Arena *arena, String command_line, Compiler_Command *
 			string_starts_with(argument, LIT("-MF"))) {
 			result->generates_dependencies = true;
 		}
-		arena_restore(scratch.arena, mark);
 	}
 	result->can_add_make_dependencies = result->compiles &&
 		!result->generates_dependencies &&
 		(result->kind == COMPILER_KIND_CLANG ||
 		 result->kind == COMPILER_KIND_CLANG_CL ||
 		 result->kind == COMPILER_KIND_GCC);
-	end_scratch(scratch);
 	return true;
 }
 
 b32 compiler_command_add_dependencies(Arena *arena, const Compiler_Command *command,
-	String command_line, String dependency_file, String *result)
+	String_Array arguments, String dependency_file, String_Array *result)
 {
-	void *start;
-
-	if (!arena || !command || !result || !command_line.data || !dependency_file.data ||
+	u32 extra_count;
+	if (!arena || !command || !result || (arguments.count && !arguments.items) || !dependency_file.data ||
 		command->kind == COMPILER_KIND_UNKNOWN || !command->compiles ||
 		command->generates_dependencies) {
 		return false;
 	}
-
-	start = arena_top(arena);
-	arena_append_str(arena, command_line);
+	if (command->kind == COMPILER_KIND_CLANG_CL) extra_count = 2;
+	else extra_count = 3;
+	if (arguments.count > UINT32_MAX - extra_count) return false;
+	String *items = arena_push_aligned(arena,
+		(u64)(arguments.count + extra_count) * sizeof(*items), _Alignof(String));
+	if (!items) return false;
+	if (arguments.count) memcpy(items, arguments.items, (size_t)arguments.count * sizeof(*items));
+	result->items = items;
+	result->count = arguments.count;
 	switch (command->kind) {
 	case COMPILER_KIND_CLANG:
 	case COMPILER_KIND_GCC:
-		arena_append_text(arena, " -MD -MF \"");
-		arena_append_str(arena, dependency_file);
-		arena_append_char(arena, '"');
+		items[result->count++] = LIT("-MD");
+		items[result->count++] = LIT("-MF");
+		items[result->count++] = dependency_file;
 		break;
 	case COMPILER_KIND_CLANG_CL:
-		arena_append_text(arena, " /clang:-MD /clang:-MF\"");
-		arena_append_str(arena, dependency_file);
-		arena_append_char(arena, '"');
+		items[result->count++] = LIT("/clang:-MD");
+		{
+			void *start = arena_top(arena);
+			if (!arena_append_text(arena, "/clang:-MF") || !arena_append_str(arena, dependency_file)) return false;
+			items[result->count] = arena_string_from(arena, start);
+			arena_finalize_string(arena, items[result->count]);
+			++result->count;
+		}
 		break;
 	case COMPILER_KIND_MSVC:
-		arena_append_text(arena, " /sourceDependencies \"");
-		arena_append_str(arena, dependency_file);
-		arena_append_char(arena, '"');
+		items[result->count++] = LIT("/sourceDependencies");
+		items[result->count++] = dependency_file;
 		break;
 	default:
 		return false;
 	}
-	*result = arena_string_from(arena, start);
-	arena_finalize_string(arena, *result);
 	return true;
 }
 

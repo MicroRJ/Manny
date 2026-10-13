@@ -1,15 +1,15 @@
 message := {
 	kind = "static_library",
 	name = "message",
-	sources = { "message.c" },
-	public_include_directories = { "." },
+	sources = [ "message.c" ],
+	public_include_directories = [ "." ],
 }
 
 hello := {
 	kind = "executable",
 	name = "hello",
-	sources = { "main.c" },
-	dependencies = { message },
+	sources = [ "main.c" ],
+	dependencies = [ message ],
 }
 
 run := {
@@ -38,11 +38,11 @@ options := {
 entries := {}
 
 entries.build = fun() {
-	ret manny.build({ targets = { tasks.default_task }, options = options })
+	ret manny.build({ targets = [ tasks.default_task ], options = options })
 }
 
 entries.run = fun() {
-	ret manny.build({ targets = { tasks.targets.run }, options = options })
+	ret manny.build({ targets = [ tasks.targets.run ], options = options })
 }
 
 ret entries

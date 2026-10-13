@@ -23,9 +23,9 @@ typedef struct Compiler_Command
 }
 Compiler_Command;
 
-b32 compiler_command_parse(Arena *arena, String command_line, Compiler_Command *result);
+b32 compiler_command_analyze(String executable, String_Array arguments, Compiler_Command *result);
 b32 compiler_command_add_dependencies(Arena *arena, const Compiler_Command *command,
-	String command_line, String dependency_file, String *result);
+	String_Array arguments, String dependency_file, String_Array *result);
 
 #endif
 

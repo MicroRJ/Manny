@@ -17,8 +17,8 @@ Manny_Fingerprint;
 typedef struct Manny_Task_Desc
 {
 	String       name;
-	// TODO(RJ): replace this with the executable name, and arguments instead!
-	String       command_line;
+	String       executable;
+	String_Array arguments;
 	String       working_directory;
 	String_Array inputs;
 	String_Array outputs;
