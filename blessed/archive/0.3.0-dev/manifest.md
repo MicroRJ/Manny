@@ -1,10 +1,9 @@
 # Manny Manifest
 - target                     := windows-x64
 - manny_version              := 0.3.0-dev
-- manny_source_commit        := f61a53e626cc55df3075dde17f98b60b5be88ae1
+- manny_source_commit        := 70cbd7506d2b15e9d51ad008b984cc71828df85a
 - elf_version                := 0.2.0-dev
-- elf_commit                 := 2d44d6c4e663a1c533604149e587f9bb7abd2fe4
-- platform_version           := 0.1.0-dev
-- platform_commit            := 95294715b49d8d98798cf5bfab067abc19a0921d
-- executable_size            := 1,465,344 bytes
-- SHA-256                    := c5942cae346ed669ac763e82a94e3b2618e5803c16f13fd64f012bb12727b9b4
+- elf_commit                 := 82334caf67c4c2b92ef24561834a37a75a207094
+- dy_core_commit             := a666eb39ec75de65602b47c4f73190dcf852302f
+- executable_size            := 839,680 bytes
+- SHA-256                    := 3f4bd3cbcc9cfefb08f4f484d18e220033e4d2d9a45c95116ea8a26b924fbaf6
