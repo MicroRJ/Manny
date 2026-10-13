@@ -1,109 +1,5 @@
 #include "test.h"
 
-static b32 test_elf_descriptor(void)
-{
-    static const char source[] =
-        "compile_main := {\n"
-        "    name = \"compile main\",\n"
-        "    exec = \"clang-cl\",\n"
-		"    args = [\"/c\", \"main.c\"],\n"
-        "    working_directory = \".\",\n"
-        "    inputs = [\"main.c\"],\n"
-        "    outputs = [\"main.obj\"],\n"
-        "    include_dirs = [\"include\"],\n"
-        "    dependencies = [],\n"
-        "}\n"
-        "compile_message := {\n"
-        "    name = \"compile message\",\n"
-		"    exec = \"clang-cl\",\n"
-		"    args = [\"/c\", \"message.c\"],\n"
-        "    dependencies = [],\n"
-        "}\n"
-        "link := {\n"
-        "    name = \"link hello.exe\",\n"
-		"    exec = \"clang-cl\",\n"
-		"    args = [\"main.obj\", \"message.obj\"],\n"
-        "    dependencies = [compile_main, compile_message],\n"
-        "}\n"
-        "run := {\n"
-        "    name = \"run hello.exe\",\n"
-		"    exec = \"hello.exe\",\n"
-		"    args = [],\n"
-        "    dependencies = [link],\n"
-        "}\n"
-        "ret {\n"
-		"    root = \"build\",\n"
-        "    targets = [run],\n"
-        "    options = {workers = 2, verbosity = 0},\n"
-        "}\n";
-    String path = LIT("build/test_elf_descriptor.elf");
-    Script_Build build;
-    Manny *graph;
-
-    CHECK(!dy_create_directories(LIT("build")).error);
-    CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
-    if (!script_load_build(path, &build)) {
-        dy_remove_file(path);
-        printf("  elf error: %s\n", build.error);
-        return false;
-    }
-    CHECK(!dy_remove_file(path).error);
-    graph = manny_build_graph(build.build);
-	CHECK(string_ends_with(manny_path_string(build.build, manny_build_root(build.build)), LIT("/build")));
-    CHECK(manny_task_count(build.build) == 4);
-    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 0))), LIT("run hello.exe")));
-    CHECK(manny_dependency_count(manny_node_at(graph, 0)) == 1);
-    CHECK(manny_dependency(manny_node_at(graph, 0), 0) == manny_node_at(graph, 1));
-    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 2))), LIT("compile main")));
-    CHECK(build.options.has_worker_count);
-    CHECK(build.options.worker_count == 2);
-    CHECK(build.options.has_verbosity);
-    CHECK(build.options.verbosity == 0);
-    CHECK(manny_dependency_count(manny_node_at(graph, 1)) == 2);
-    CHECK(manny_dependency(manny_node_at(graph, 1), 0) == manny_node_at(graph, 2));
-    manny_build_destroy(build.build);
-    return true;
-}
-
-static b32 test_elf_generated_descriptor(void)
-{
-    static const char source[] =
-        "tasks := []\n"
-        "dependencies := []\n"
-        "for index := 0 ... 8 ? {\n"
-        "    task := {\n"
-        "        name = f\"generated ${index}\",\n"
-		"        exec = \"generate\",\n"
-		"        args = [f\"${index}\"],\n"
-        "        dependencies = dependencies,\n"
-        "    }\n"
-        "    tasks:add(task)\n"
-        "    dependencies = [task]\n"
-        "}\n"
-        "ret {targets = [tasks[7]]}\n";
-    String path = LIT("build/test_elf_generated_descriptor.elf");
-    Script_Build build;
-    Manny *graph;
-
-    CHECK(!dy_create_directories(LIT("build")).error);
-    CHECK(manny_platform_write_entire_file(path, source, sizeof(source) - 1));
-    if (!script_load_build(path, &build)) {
-        dy_remove_file(path);
-        printf("  elf error: %s\n", build.error);
-        return false;
-    }
-    CHECK(!dy_remove_file(path).error);
-    graph = manny_build_graph(build.build);
-    CHECK(manny_task_count(build.build) == 8);
-    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 0))), LIT("generated 7")));
-    CHECK(manny_dependency_count(manny_node_at(graph, 0)) == 1);
-    CHECK(manny_dependency(manny_node_at(graph, 0), 0) == manny_node_at(graph, 1));
-    CHECK(string_equal(string_from_cstring(manny_task_name(manny_node_at(graph, 7))), LIT("generated 0")));
-    CHECK(manny_dependency_count(manny_node_at(graph, 7)) == 0);
-    manny_build_destroy(build.build);
-    return true;
-}
-
 static b32 test_manny_script(void)
 {
     Arena arena = arena_create(MEGABYTES(16));
@@ -165,8 +61,6 @@ static b32 test_script_functions(void)
 int main(void)
 {
 	static const Manny_Test tests[] = {
-		MANNY_TEST(test_elf_descriptor),
-		MANNY_TEST(test_elf_generated_descriptor),
 		MANNY_TEST(test_manny_script),
 		MANNY_TEST(test_pet_manny),
 		MANNY_TEST(test_script_functions),

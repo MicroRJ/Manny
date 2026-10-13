@@ -206,26 +206,6 @@ cleanup:
 	return result;
 }
 
-static b32 test_option_resolution(void)
-{
-	Script_Options script = {
-		.worker_count = 2,
-		.verbosity = 0,
-		.has_worker_count = true,
-		.has_verbosity = true,
-	};
-	Cmd_Options command_line = {
-		.verbosity = 3,
-		.has_verbosity = true,
-	};
-	Script_Options merged = script_options_resolve(script, command_line);
-	CHECK(merged.worker_count == 2);
-	CHECK(merged.verbosity == 3);
-	CHECK(merged.has_worker_count);
-	CHECK(merged.has_verbosity);
-	return true;
-}
-
 static b32 test_compiler_command(void)
 {
 	Arena arena = arena_create(KILOBYTES(64));
@@ -273,7 +253,6 @@ static b32 test_compiler_command(void)
 int main(void)
 {
 	static const Manny_Test tests[] = {
-		MANNY_TEST(test_option_resolution),
 		MANNY_TEST(test_compiler_command),
 		MANNY_TEST(test_make_depfile),
 		MANNY_TEST(test_compiler_dependency_state),

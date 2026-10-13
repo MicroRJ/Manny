@@ -2,36 +2,8 @@
 
 #include "scripts/elf_adapter.h"
 #include "platform_adapter.h"
-#include "logger.h"
 
 #include <stdarg.h>
-#include <stdio.h>
-
-struct
-{
-	const String           extension;
-	const Script_Interface interface;
-}
-static const backends[] =
-{
-	{
-		.extension  = LIT(".elf"),
-		.interface = {
-			.load       = elf_script_load,
-			.destroy    = elf_script_destroy,
-			.invoke     = elf_script_invoke,
-			.read_build = elf_script_read_build,
-		},
-	}
-};
-
-static const Script_Interface *find_backend(String path)
-{
-	for (u32 i = 0; i < ARRAY_COUNT(backends); ++i) {
-		if (string_ends_with_insensitive(path, backends[i].extension)) return &backends[i].interface;
-	}
-	return NULL;
-}
 
 void script_set_error(Script *script, const char *format, ...)
 {
@@ -44,45 +16,38 @@ void script_set_error(Script *script, const char *format, ...)
 	arena_finalize_string(script->arena, script->error);
 }
 
-b32 script_supports_path(String path)
-{
-	return find_backend(path) != NULL;
-}
-
-// NOTE(RJ): removed path copy from here, didn't seem necessary, no-one stores path!
 Script *script_load(Arena *arena, String path)
 {
 	Script *script = arena_push_zero_aligned(arena, sizeof(*script), _Alignof(Script));
-	script->arena = arena;
-	script->backend = find_backend(path);
-
-	if (!script->backend) {
-		script_set_error(script, "no script backend supports '%.*s'", (int)path.size, path.data);
-		return script;
+	if (script)
+	{
+		script->arena = arena;
+		String source = {0};
+		if (!manny_platform_read_entire_file(script->arena, path, &source))
+		{
+			script_set_error(script, "unable to read '%s'", path.data);
+		}
+		else if (source.size > UINT32_MAX)
+		{
+			script_set_error(script, "script is too large: '%s'", path.data);
+		}
+		else
+		{
+			script->loaded = elf_script_load(script, path, source);
+		}
 	}
-	// TODO(RJ): just let caller give us the source directly!
-	String source;
-	if (!manny_platform_read_entire_file(script->arena, path, &source)) {
-		log_error("unable to read '%s'", path.data);
-		script_destroy(script);
-		return NULL;
-	}
-	if (source.size > UINT32_MAX) {
-		log_error("script is too large: '%s'", path.data);
-		script_destroy(script);
-		return NULL;
-	}
-
-	// NOTE(RJ): the path is for logging only!
-	script->loaded = script->backend->load(script, path, source);
 	return script;
 }
 
 void script_destroy(Script *script)
 {
-	if (script && script->context && script->backend->destroy) script->backend->destroy(script);
-	if (script) {
-		script->context = NULL;
+	if (script)
+	{
+		if (script->elf)
+		{
+			elf_script_destroy(script);
+		}
+		script->elf = NULL;
 		script->loaded = false;
 	}
 }
@@ -104,48 +69,42 @@ String_Array script_functions(Script *script)
 
 b32 script_has_function(Script *script, String name)
 {
-	if (!script) return false;
-	for (u32 i = 0; i < script->functions.count; ++i) {
-		if (string_equal(script->functions.items[i], name)) return true;
+	b32 result = false;
+	if (script)
+	{
+		for (u32 i = 0; i < script->functions.count && !result; ++i)
+		{
+			result = string_equal(script->functions.items[i], name);
+		}
 	}
-	return false;
+	return result;
 }
 
-void script_set_command_line_options(Script *script, Cmd_Options options)
+void script_set_invocation_options(Script *script, Script_Invocation_Options options)
 {
-	if (script) script->command_line_options = options;
+	if (script)
+	{
+		script->invocation_options = options;
+	}
 }
 
 b32 script_invoke(Script *script, String name)
 {
-	if (!script_is_loaded(script)) return false;
-	if (!script_has_function(script, name)) {
-		script_set_error(script, "script has no function '%.*s'", (int)name.size, name.data);
-		return false;
+	b32 result = false;
+	if (script_is_loaded(script))
+	{
+		if (!script_has_function(script, name))
+		{
+			script_set_error(script, "script has no function '%.*s'", (int)name.size, name.data);
+		}
+		else
+		{
+			script->failed = false;
+			Scratch scratch = begin_different_scratch(script->arena);
+			String terminated_name = str_push_copy(scratch.arena, name);
+			result = elf_script_invoke(script, terminated_name) && !script->failed;
+			end_scratch(scratch);
+		}
 	}
-	script->failed = false;
-	Scratch scratch = begin_different_scratch(script->arena);
-	String terminated_name = str_push_copy(scratch.arena, name);
-	b32 result = script->backend->invoke(script, terminated_name);
-	end_scratch(scratch);
-	return result && !script->failed;
-}
-
-b32 script_read_build(Script *script, Script_Build *result)
-{
-	if (!script_is_loaded(script)) return false;
-	return script->backend->read_build(script, result);
-}
-
-b32 script_load_build(String path, Script_Build *result)
-{
-	*result = (Script_Build){0};
-	Scratch scratch = begin_scratch();
-	Script *script = script_load(scratch.arena, path);
-	b32 success = false;
-	if (script_is_loaded(script)) success = script_read_build(script, result);
-	else snprintf(result->error, sizeof(result->error), "%s", script_error(script).data);
-	script_destroy(script);
-	end_scratch(scratch);
-	return success;
+	return result;
 }

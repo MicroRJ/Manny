@@ -9,12 +9,28 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct Elf_Script
+struct Elf_Script
 {
 	elf_State *state;
 	elf_Ref exports;
+};
+
+typedef struct Elf_Build_Options
+{
+	u32 worker_count;
+	i32 verbosity;
+	b32 has_worker_count;
+	b32 has_verbosity;
 }
-Elf_Script;
+Elf_Build_Options;
+
+typedef struct Elf_Build
+{
+	Manny_Build *build;
+	Elf_Build_Options options;
+	char error[256];
+}
+Elf_Build;
 
 typedef struct Ref_List
 {
@@ -115,12 +131,12 @@ static b32 set_function(elf_State *state, elf_i32 table, const char *name, elf_F
 	return elf_set_field(state, table, name) == ELF_ERROR_NONE;
 }
 
-static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
+static b32 load_build(Script *script, elf_i32 root, Elf_Build *result)
 {
 	ASSERT(script);
 	ASSERT(result);
 
-	Elf_Script *elf = script->context;
+	Elf_Script *elf = script->elf;
 	elf_State *state = elf->state;
 
 	elf_i32 checkpoint = elf_get_top(state);
@@ -136,7 +152,7 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 	if (!elf_is_nil(state, -1)) {
 		build_root = copy_stack_string(scratch.arena, state, -1);
 		if (!build_root.data || build_root.size == 0) {
-			snprintf(result->error, sizeof(result->error), "returned 'root' field must be a non-empty string");
+			snprintf(result->error, sizeof(result->error), "'root' must be a non-empty string");
 			goto cleanup;
 		}
 	}
@@ -147,7 +163,7 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 	{
 		elf_i32 options = elf_abs_index(state, -1);
 		if (elf_type(state, options) != ELF_VALUE_TYPE_TABLE) {
-			snprintf(result->error, sizeof(result->error), "returned 'options' field must be a table");
+			snprintf(result->error, sizeof(result->error), "'options' must be a table");
 			goto cleanup;
 		}
 		elf_Int integer = 0;
@@ -175,7 +191,7 @@ static b32 read_build_table(Script *script, elf_i32 root, Script_Build *result)
 	elf_i32 targets = elf_abs_index(state, -1);
 	elf_u32 target_count = 0;
 	if (!elf_length(state, targets, &target_count)) {
-		snprintf(result->error, sizeof(result->error), "returned table requires a 'targets' table");
+		snprintf(result->error, sizeof(result->error), "manny.build requires a 'targets' array");
 		goto cleanup;
 	}
 	for (elf_u32 i = 0; i < target_count; ++i)
@@ -334,24 +350,13 @@ cleanup:
 	return success;
 }
 
-b32 elf_script_read_build(Script *script, Script_Build *result)
-{
-	Elf_Script *elf = script->context;
-	elf_i32 checkpoint = elf_get_top(elf->state);
-	if (!elf_push_ref(elf->state, elf->exports)) return false;
-	elf_i32 root = elf_abs_index(elf->state, -1);
-	b32 success = read_build_table(script, root, result);
-	elf_set_top(elf->state, checkpoint);
-	return success;
-}
-
 ELF_FUNCTION(l_manny_build)
 {
 	(void)nargs;
 	(void)nrets;
 	Script *script = elf_get_user_data(S);
-	Script_Build build = {0};
-	if (!read_build_table(script, 1, &build))
+	Elf_Build build = {0};
+	if (!load_build(script, 1, &build))
 	{
 		script_set_error(script, "%s", build.error);
 		script->failed = true;
@@ -359,12 +364,21 @@ ELF_FUNCTION(l_manny_build)
 		return 1;
 	}
 
-	Script_Options options = script_options_resolve(build.options, script->command_line_options);
-	logger_set_verbosity(options.verbosity);
+	u32 worker_count = build.options.has_worker_count ? build.options.worker_count : 4;
+	i32 verbosity = build.options.has_verbosity ? build.options.verbosity : 0;
+	if (script->invocation_options.has_worker_count)
+	{
+		worker_count = script->invocation_options.worker_count;
+	}
+	if (script->invocation_options.has_verbosity)
+	{
+		verbosity = script->invocation_options.verbosity;
+	}
+	logger_set_verbosity(verbosity);
 	Profile_Scope scope = profile_scope_begin("builder");
 	b32 succeeded = manny_build(build.build, (Manny_Build_Params){
-		.worker_count = options.worker_count,
-		.explain = script->command_line_options.explain,
+		.worker_count = worker_count,
+		.explain = script->invocation_options.explain,
 	});
 	profile_scope_end(&scope);
 	manny_build_destroy(build.build);
@@ -442,7 +456,7 @@ b32 elf_script_load(Script *script, String path, String source)
 {
 	Elf_Script *elf = arena_push_zero_aligned(script->arena, sizeof(*elf), _Alignof(Elf_Script));
 	elf->state = elf_create_state();
-	script->context = elf;
+	script->elf = elf;
 	if (!elf->state) {
 		script_set_error(script, "unable to create elf state");
 		return false;
@@ -502,7 +516,7 @@ b32 elf_script_load(Script *script, String path, String source)
 
 void elf_script_destroy(Script *script)
 {
-	Elf_Script *elf = script->context;
+	Elf_Script *elf = script->elf;
 	if (elf->exports != ELF_NO_REF) elf_release_ref(elf->state, elf->exports);
 	if (elf->state) elf_destroy_state(elf->state);
 	elf->exports = ELF_NO_REF;
@@ -511,7 +525,7 @@ void elf_script_destroy(Script *script)
 
 b32 elf_script_invoke(Script *script, String name)
 {
-	Elf_Script *elf = script->context;
+	Elf_Script *elf = script->elf;
 	elf_i32 checkpoint = elf_get_top(elf->state);
 	if (!elf_push_ref(elf->state, elf->exports)) return false;
 	elf_i32 exports = elf_abs_index(elf->state, -1);

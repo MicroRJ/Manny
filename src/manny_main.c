@@ -11,33 +11,7 @@
 #include <limits.h>
 #include <stdio.h>
 
-static int run_build(Script *script, Cmd_Options command_line_options)
-{
-   Script_Build build = {0};
-   int exit_code = 1;
-
-	if (!script_read_build(script, &build)) {
-		log_error("%s", build.error);
-		goto cleanup;
-	}
-	Script_Options options = script_options_resolve(build.options, command_line_options);
-	logger_set_verbosity(options.verbosity);
-
-   {
-      Profile_Scope scope = profile_scope_begin("builder");
-      exit_code = manny_build(build.build, (Manny_Build_Params){
-			.worker_count = options.worker_count,
-			.explain = command_line_options.explain,
-		}) ? 0 : 1;
-      profile_scope_end(&scope);
-   }
-
-   cleanup:
-   manny_build_destroy(build.build);
-   return exit_code;
-}
-
-static int run_script(String path, String function_name, Cmd_Options command_line_options)
+static int run_script(String path, String function_name, Script_Invocation_Options invocation_options)
 {
 	Manny_Platform_File_Info build_file;
 	if (!manny_platform_file_info(path, &build_file))
@@ -60,15 +34,12 @@ static int run_script(String path, String function_name, Cmd_Options command_lin
 		end_scratch(scratch);
 		return 1;
 	}
-	script_set_command_line_options(script, command_line_options);
+	script_set_invocation_options(script, invocation_options);
 
 	int exit_code = 1;
 	if (script_has_function(script, function_name)) {
 		exit_code = script_invoke(script, function_name) ? 0 : 1;
 		if (exit_code) log_error("%s: %s", path.data, script_error(script).data);
-	}
-	else if (string_is(function_name, "build")) {
-		exit_code = run_build(script, command_line_options);
 	}
 	else
 	{
@@ -94,11 +65,12 @@ static int run_script(String path, String function_name, Cmd_Options command_lin
 
 int main(int argument_count, char **arguments)
 {
-   Cmd_Options command_line_options = {0};
+   Script_Invocation_Options invocation_options = {0};
    String build_path = LIT("build.elf");
    String function_name = LIT("build");
    b32 has_build_path = false;
    b32 has_function = false;
+   b32 quiet = false;
    b32 profile = false;
    b32 profile_threads = false;
    int argument_index;
@@ -109,8 +81,8 @@ int main(int argument_count, char **arguments)
    {
       if (strcmp(arguments[argument_index], "--verbose") == 0)
       {
-         command_line_options.verbosity = 1;
-         command_line_options.has_verbosity = true;
+         invocation_options.verbosity = 1;
+         invocation_options.has_verbosity = true;
          if (argument_index + 1 < argument_count)
          {
             char *end;
@@ -122,7 +94,7 @@ int main(int argument_count, char **arguments)
                   log_error("invalid verbosity level: %s", arguments[argument_index + 1]);
                   return 2;
                }
-               command_line_options.verbosity = (i32)parsed;
+               invocation_options.verbosity = (i32)parsed;
                ++argument_index;
             }
          }
@@ -130,7 +102,7 @@ int main(int argument_count, char **arguments)
       else if (strcmp(arguments[argument_index], "-q") == 0 ||
                strcmp(arguments[argument_index], "--quiet") == 0)
       {
-         command_line_options.quiet = true;
+         quiet = true;
       }
       else if (strcmp(arguments[argument_index], "--workers") == 0 && argument_index + 1 < argument_count)
       {
@@ -141,8 +113,8 @@ int main(int argument_count, char **arguments)
             log_error("invalid worker count: %s", arguments[argument_index]);
             return 2;
          }
-         command_line_options.worker_count = (u32)parsed;
-         command_line_options.has_worker_count = true;
+         invocation_options.worker_count = (u32)parsed;
+         invocation_options.has_worker_count = true;
       }
       else if (strcmp(arguments[argument_index], "--profile") == 0)
       {
@@ -155,7 +127,7 @@ int main(int argument_count, char **arguments)
       }
       else if (strcmp(arguments[argument_index], "--explain") == 0)
       {
-         command_line_options.explain = true;
+         invocation_options.explain = true;
       }
       else if (strcmp(arguments[argument_index], "--version") == 0)
       {
@@ -166,7 +138,7 @@ int main(int argument_count, char **arguments)
       else if (arguments[argument_index][0] != '-')
       {
          String argument = string_from_cstring(arguments[argument_index]);
-         if (script_supports_path(argument)) {
+         if (string_ends_with_insensitive(argument, LIT(".elf"))) {
             if (has_build_path) {
                log_error("multiple build files specified: %s", argument.data);
                return 2;
@@ -189,13 +161,13 @@ int main(int argument_count, char **arguments)
          return 2;
       }
    }
-   logger_set_quiet(command_line_options.quiet);
+   logger_set_quiet(quiet);
    profiler_set_enabled(profile);
    profiler_reset();
    {
       int result;
       Profile_Scope scope = profile_scope_begin("build");
-      result = run_script(build_path, function_name, command_line_options);
+      result = run_script(build_path, function_name, invocation_options);
       profile_scope_end(&scope);
       profiler_print(profile_threads);
       return result;
