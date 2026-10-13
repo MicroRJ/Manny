@@ -36,7 +36,6 @@ core := {
 		"src/build/build_record.c",
 		"src/build/compiler_command.c",
 		"src/build/make_depfile.c",
-		"src/build/vcvars_cache.c",
 		"src/script.c",
 		"src/scripts/elf_adapter.c",
 		"src/platform_adapter.c",

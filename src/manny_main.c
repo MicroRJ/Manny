@@ -4,7 +4,6 @@
 #include "platform_adapter.h"
 #include "profiler.h"
 #include "script.h"
-#include "vcvars_cache.h"
 #include "elf.h"
 
 #include <stdlib.h>
@@ -100,7 +99,6 @@ int main(int argument_count, char **arguments)
    String function_name = LIT("build");
    b32 has_build_path = false;
    b32 has_function = false;
-   b32 cache_vcvars = false;
    b32 profile = false;
    b32 profile_threads = false;
    int argument_index;
@@ -146,10 +144,6 @@ int main(int argument_count, char **arguments)
          command_line_options.worker_count = (u32)parsed;
          command_line_options.has_worker_count = true;
       }
-      else if (strcmp(arguments[argument_index], "--cache-vcvars") == 0)
-      {
-         cache_vcvars = true;
-      }
       else if (strcmp(arguments[argument_index], "--profile") == 0)
       {
          profile = true;
@@ -191,36 +185,13 @@ int main(int argument_count, char **arguments)
       }
       else
       {
-         log_error("usage: manny [build-file] [function] [-q | --quiet] [--explain] [--verbose [N]] [--workers N] [--profile | --profile-threads]\n" "       manny --cache-vcvars\n" "       manny --version");
+         log_error("usage: manny [build-file] [function] [-q | --quiet] [--explain] [--verbose [N]] [--workers N] [--profile | --profile-threads]\n" "       manny --version");
          return 2;
       }
    }
    logger_set_quiet(command_line_options.quiet);
-   if (cache_vcvars)
-   {
-		Scratch scratch;
-		String cache_path;
-      if (has_build_path || has_function || command_line_options.has_worker_count || command_line_options.has_verbosity || command_line_options.quiet || command_line_options.explain || profile)
-      {
-         log_error("--cache-vcvars cannot be combined with build options");
-         return 2;
-      }
-		scratch = begin_scratch();
-		if (!vcvars_cache_refresh(scratch.arena, &cache_path)) {
-			end_scratch(scratch);
-			return 1;
-		}
-		log_success("cached vcvars64 environment: %s", cache_path.data);
-		end_scratch(scratch);
-      return 0;
-   }
    profiler_set_enabled(profile);
    profiler_reset();
-   {
-      Profile_Scope scope = profile_scope_begin("vcvars cache load");
-      vcvars_cache_load();
-      profile_scope_end(&scope);
-   }
    {
       int result;
       Profile_Scope scope = profile_scope_begin("build");

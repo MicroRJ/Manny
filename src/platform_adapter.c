@@ -72,33 +72,9 @@ b32 manny_platform_write_entire_file(String path, const void *data, size_t size)
 	return !write.error && written == size && !closed.error;
 }
 
-b32 manny_platform_create_directory(String path)
-{
-	return dy_create_directory(path).error == DY_ERROR_NONE;
-}
-
 b32 manny_platform_executable_resolves(String name)
 {
 	return dy_executable_resolves(name);
-}
-
-b32 manny_platform_get_environment(String name, Arena *arena, String *value)
-{
-	dy_Result result;
-	if (!arena || !value) return false;
-	result = dy_get_env_field(arena, name, value);
-	return result.error == DY_ERROR_NONE || result.error == DY_ERROR_NOT_FOUND;
-}
-
-b32 manny_platform_set_environment(String name, String value)
-{
-	dy_Result result = value.data ? dy_set_env_field(name, value) : dy_remove_env_field(name);
-	return result.error == DY_ERROR_NONE;
-}
-
-b32 manny_platform_local_app_data(Arena *arena, String *result)
-{
-	return manny_platform_get_environment(LIT("LOCALAPPDATA"), arena, result) && result->size > 0;
 }
 
 static b32 append_process_pipe(dy_Stream *stream, Arena *arena, u32 *error_code)

@@ -1,41 +1,5 @@
 #include "test.h"
 
-static b32 environment_equals(const char *name, const char *expected)
-{
-    Scratch scratch = begin_scratch();
-    String value = {0};
-	b32 equal = manny_platform_get_environment(string_from_cstring(name), scratch.arena, &value) &&
-        string_equal(value, string_from_cstring(expected));
-    end_scratch(scratch);
-    return equal;
-}
-
-static b32 test_vcvars_cache_application(void)
-{
-    static const char cache_text[] =
-        "MANNY_VCVARS_CACHE_V1\n"
-        "prepend MANNY_VCVARS_TEST_PREPEND=tool;\n"
-        "append MANNY_VCVARS_TEST_APPEND=;tail\n"
-        "set MANNY_VCVARS_TEST_SET=value\n";
-    b32 result = false;
-
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_PREPEND"), LIT("base"));
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_APPEND"), LIT("base"));
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_SET"), (String){0});
-
-    if (!vcvars_cache_apply(string_from_cstring(cache_text))) goto cleanup;
-    if (!environment_equals("MANNY_VCVARS_TEST_PREPEND", "tool;base")) goto cleanup;
-    if (!environment_equals("MANNY_VCVARS_TEST_APPEND", "base;tail")) goto cleanup;
-    if (!environment_equals("MANNY_VCVARS_TEST_SET", "value")) goto cleanup;
-    result = true;
-
-cleanup:
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_PREPEND"), (String){0});
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_APPEND"), (String){0});
-	manny_platform_set_environment(LIT("MANNY_VCVARS_TEST_SET"), (String){0});
-    return result;
-}
-
 static b32 test_high_resolution_timer(void)
 {
     u64 frequency = dy_counter_frequency();
@@ -281,7 +245,6 @@ int main(void)
 	static const Manny_Test tests[] = {
 		MANNY_TEST(test_arena_and_strings),
 		MANNY_TEST(test_thread_local_scratch),
-		MANNY_TEST(test_vcvars_cache_application),
 		MANNY_TEST(test_high_resolution_timer),
 		MANNY_TEST(test_blake3),
 		MANNY_TEST(test_build_paths),
